@@ -5,6 +5,8 @@ export interface SettingsShape {
   apiKey: string
   apiBase: string
   imageBase: string
+  /** 官方多个域名之间自动降级，网络不通时不用手动改地址 */
+  autoEndpoint: boolean
   /** 详情页是否自动缓存 TMDB 远程海报到本地 */
   cacheRemotePoster: boolean
   /** 网格视图：grid | list */
@@ -21,6 +23,7 @@ const DEFAULTS: SettingsShape = {
   apiKey: '',
   apiBase: DEFAULT_API_BASE,
   imageBase: DEFAULT_IMAGE_BASE,
+  autoEndpoint: true,
   cacheRemotePoster: true,
   view: 'grid',
   includeAdult: true,

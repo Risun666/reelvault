@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import clsx from 'clsx'
 import { posterUrl, type Zone } from '../lib/db'
+import { fallbackImageUrl } from '../lib/tmdb'
 import type { TitleItem } from '../types'
 
 interface Props {
@@ -13,7 +14,14 @@ interface Props {
 /** 海报：本地缓存优先 -> TMDB 远程兜底 -> 文字占位 */
 export default function Poster({ zone, item, className, rounded = 'rounded-xl' }: Props) {
   const [local, setLocal] = useState<string | null | undefined>(undefined)
-  const [remoteFailed, setRemoteFailed] = useState(false)
+  const [alt, setAlt] = useState<string | null>(null)
+  const [dead, setDead] = useState(false)
+
+  // 换片或换远程地址时重置降级状态
+  useEffect(() => {
+    setAlt(null)
+    setDead(false)
+  }, [item.posterRemote])
 
   useEffect(() => {
     let alive = true
@@ -29,7 +37,7 @@ export default function Poster({ zone, item, className, rounded = 'rounded-xl' }
     }
   }, [zone, item.id, item.hasLocalPoster])
 
-  const src = local || (!remoteFailed ? item.posterRemote : undefined)
+  const src = local || (dead ? undefined : (alt ?? item.posterRemote) || undefined)
 
   return (
     <div
@@ -44,7 +52,17 @@ export default function Poster({ zone, item, className, rounded = 'rounded-xl' }
           src={src}
           alt={item.title}
           loading="lazy"
-          onError={() => setRemoteFailed(true)}
+          onError={() => {
+            // 先换一组官方图片域名再试一次，仍失败才退回文字占位
+            if (!alt) {
+              const next = fallbackImageUrl(item.posterRemote)
+              if (next) {
+                setAlt(next)
+                return
+              }
+            }
+            setDead(true)
+          }}
           className="h-full w-full object-cover"
         />
       ) : (

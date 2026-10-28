@@ -64,16 +64,7 @@ export default function Discover() {
       setSearching(true)
       setSearchError(null)
       try {
-        const hits = await searchTitles(
-          {
-            apiKey: settings.apiKey,
-            apiBase: settings.apiBase,
-            imageBase: settings.imageBase,
-            includeAdult: settings.includeAdult
-          },
-          kw,
-          k
-        )
+        const hits = await searchTitles(settings, kw, k)
         setResults(hits)
       } catch (e) {
         setResults([])
@@ -82,7 +73,7 @@ export default function Discover() {
         setSearching(false)
       }
     },
-    [settings.apiKey, settings.apiBase, settings.imageBase, settings.includeAdult]
+    [settings]
   )
 
   const timer = useRef<number | undefined>(undefined)

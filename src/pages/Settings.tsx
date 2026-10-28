@@ -11,6 +11,7 @@ import { buildBackup, downloadCsv, downloadJson, importBackup } from '../lib/bac
 import Icon from '../components/Icon'
 import { Button, Confirm, Field, Segmented, Sheet, inputCls } from '../components/ui'
 import { toast } from '../components/Toast'
+import { DEFAULT_API_BASE, probeAll, type ProbeResult } from '../lib/tmdb'
 import CloudSyncPanel from '../components/CloudSyncPanel'
 import AppearancePanel from '../components/AppearancePanel'
 
@@ -26,6 +27,8 @@ export default function Settings() {
   const [apiBaseDraft, setApiBaseDraft] = useState(settings.apiBase)
   const [imageBaseDraft, setImageBaseDraft] = useState(settings.imageBase)
   const [advanced, setAdvanced] = useState(false)
+  const [probes, setProbes] = useState<ProbeResult[] | null>(null)
+  const [probing, setProbing] = useState(false)
 
   const [exportSheet, setExportSheet] = useState(false)
   const [exportPosters, setExportPosters] = useState(true)
@@ -46,6 +49,37 @@ export default function Settings() {
   useEffect(() => {
     void useVaultSession.getState().touch()
   }, [])
+
+  const runProbe = async () => {
+    if (!settings.apiKey) {
+      toast('请先填写 TMDB API Key', 'bad')
+      return
+    }
+    setProbing(true)
+    try {
+      const list = await probeAll(settings)
+      setProbes(list)
+      const best = list.find((r) => r.ok)
+      if (!best) {
+        toast('所有节点都不可达，需要自建反代或走代理', 'bad')
+        return
+      }
+      if (best.base !== settings.apiBase) {
+        settings.set({ apiBase: best.base })
+        const img = best.base.includes('themoviedb.org')
+          ? 'https://image.themoviedb.org/t/p'
+          : 'https://image.tmdb.org/t/p'
+        settings.set({ imageBase: img })
+        toast(`已切到最快的节点（${best.ms}ms）`, 'good')
+      } else {
+        toast(`当前节点最快（${best.ms}ms）`, 'good')
+      }
+    } catch (e) {
+      toast(e instanceof Error ? e.message : '测速失败', 'bad')
+    } finally {
+      setProbing(false)
+    }
+  }
 
   const doExport = async () => {
     setExporting(true)
@@ -133,11 +167,80 @@ export default function Settings() {
         <p className="mb-3 text-[0.75rem] leading-relaxed text-ink-faint">
           到 themoviedb.org 注册后在「Settings → API」免费申请。填一次即可自动拉取封面、简介、演员。
         </p>
+        {/* 接口节点测速 */}
+        <div className="mb-3 rounded-xl border border-paper-line bg-paper/60 p-3">
+          <div className="flex items-center justify-between gap-2">
+            <div className="min-w-0">
+              <div className="text-[0.8125rem] font-medium">接口节点</div>
+              <div className="mt-0.5 truncate font-mono text-[0.6875rem] text-ink-faint">
+                {settings.apiBase}
+              </div>
+            </div>
+            <Button
+              variant="outline"
+              className="shrink-0 px-2.5 py-1.5 text-[0.75rem]"
+              onClick={() => void runProbe()}
+              disabled={probing}
+            >
+              {probing ? '测速中…' : '测速并择优'}
+            </Button>
+          </div>
+
+          {probes && (
+            <div className="mt-2.5 space-y-1">
+              {probes.map((p) => {
+                const active = p.base === settings.apiBase
+                return (
+                  <button
+                    key={p.base}
+                    onClick={() => {
+                      if (!p.ok) return
+                      settings.set({
+                        apiBase: p.base,
+                        imageBase: p.base.includes('themoviedb.org')
+                          ? 'https://image.themoviedb.org/t/p'
+                          : 'https://image.tmdb.org/t/p'
+                      })
+                    }}
+                    className={clsx(
+                      'flex w-full items-center justify-between gap-2 rounded-lg border px-2.5 py-1.5 text-left text-[0.75rem]',
+                      active
+                        ? 'border-reel/40 bg-reel-soft/60 text-reel-dark'
+                        : 'border-paper-line bg-white',
+                      !p.ok && 'opacity-60'
+                    )}
+                  >
+                    <span className="min-w-0 flex-1 truncate">
+                      {p.label}
+                      {p.note && <span className="ml-1 text-ink-faint">· {p.note}</span>}
+                    </span>
+                    <span className={clsx('shrink-0 tabular-nums', p.ok ? 'text-moss' : 'text-ink-faint')}>
+                      {p.ok ? `${p.ms}ms` : '不可达'}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+          )}
+
+          <p className="mt-2 text-[0.6875rem] leading-relaxed text-ink-faint">
+            大陆网络常屏蔽 themoviedb.org，默认已改用官方短域名。仍不通就点「测速并择优」；
+            若全部不可达，可在下方填自建反代地址（仓库 <span className="font-mono">workers/</span> 里有现成脚本）。
+          </p>
+        </div>
+
+        <ToggleRow
+          label="自动在官方节点间降级"
+          desc="一个节点超时就自动换下一个，不用手动改地址。关掉后只使用当前填写的地址。"
+          value={settings.autoEndpoint}
+          onChange={(v) => settings.set({ autoEndpoint: v })}
+        />
+
         <button
           onClick={() => setAdvanced((v) => !v)}
-          className="mb-2 text-[0.75rem] text-ink-soft underline decoration-paper-line"
+          className="mb-2 mt-1 text-[0.75rem] text-ink-soft underline decoration-paper-line"
         >
-          {advanced ? '收起高级选项' : '网络访问不畅？展开代理设置'}
+          {advanced ? '收起高级选项' : '自建反代 / 手动指定地址'}
         </button>
         {advanced && (
           <div className="space-y-3 border-t border-paper-line pt-3">
@@ -147,6 +250,18 @@ export default function Settings() {
             <Field label="图片地址">
               <input value={imageBaseDraft} onChange={(e) => setImageBaseDraft(e.target.value)} onBlur={() => settings.set({ imageBase: imageBaseDraft.trim() })} className={inputCls} />
             </Field>
+            <Button
+              variant="outline"
+              className="w-full"
+              onClick={() => {
+                setApiBaseDraft(DEFAULT_API_BASE)
+                setImageBaseDraft('https://image.tmdb.org/t/p')
+                settings.set({ apiBase: DEFAULT_API_BASE, imageBase: 'https://image.tmdb.org/t/p' })
+                toast('已恢复官方默认地址')
+              }}
+            >
+              恢复官方默认地址
+            </Button>
           </div>
         )}
         <ToggleRow

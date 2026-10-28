@@ -20,6 +20,33 @@ npm run build      # 产物在 dist/
 npm run typecheck
 ```
 
+## 国内访问 TMDB
+
+发现页 / 封面拉取走 TMDB，大陆网络下偶尔不通。App 内置了三层兜底，一般不用手动折腾：
+
+1. **默认用官方短域名** `https://api.tmdb.org/3`（`themoviedb.org` 这组域名在大陆被干扰得多得多）
+2. **自动降级**：一个节点 1.8 秒没响应就并行打下一个，Key 无效/限流这类错误不重试
+3. **海报域名兜底**：`image.tmdb.org` 加载失败会自动换 `image.themoviedb.org` 再试一次
+
+还是不行的话，去「设置 → 数据来源」点 **测速并择优**，App 会并发测所有候选节点并显示延迟，自动切到最快那个。
+
+### 自建反代（候选节点全不可达时）
+
+`workers/` 下有两个现成脚本：
+
+| 脚本 | 适合 | 部署 |
+| --- | --- | --- |
+| `workers/tmdb-proxy.js` | Cloudflare 免费额度 | `cd workers && npx wrangler deploy` |
+| `workers/node-proxy.mjs` | 境外 VPS，零依赖 | `node workers/node-proxy.mjs` |
+
+部署完把「设置 → 数据来源 → 自建反代 / 手动指定地址」里填成：
+
+- API 地址：`https://<你的域名>/3`
+- 图片地址：`https://<你的域名>/t/p`
+
+> 两个脚本都只放行 `/3/` 和 `/t/p/`，且只转发到 TMDB 官方域名，不会被当开放代理滥用。
+> Cloudflare 的 `*.workers.dev` 在大陆同样不稳，**一定要绑自己的域名**。
+
 ## 打包 Android APK
 
 仓库里已包含 `android/` 原生工程与 GitHub Actions 工作流，本地**不需要** Android SDK。
