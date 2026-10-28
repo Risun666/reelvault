@@ -2,6 +2,10 @@
 
 只收藏，不播放。记录你看过的每一部电影与剧集，带一个完全隐蔽的隐私保险箱。
 
+**仓库**：https://github.com/Risun666/reelvault
+**APK 下载**：https://github.com/Risun666/reelvault/releases/latest
+（`app-release.apk` 2.9MB · `app-debug.apk` 3.6MB，安装时允许「未知来源」即可）
+
 - 前端：React 18 + TypeScript + Vite + Tailwind
 - 数据：IndexedDB（本地优先），隐私区与主库物理隔离
 - 云同步：WorkBuddy Cloud（登录后才启用，隐私区永不上云）
