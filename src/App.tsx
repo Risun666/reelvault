@@ -15,7 +15,6 @@ import AddItem from './pages/AddItem'
 import VaultGate from './pages/VaultGate'
 import Collections from './pages/Collections'
 import CollectionDetail from './pages/CollectionDetail'
-import { restoreAuthSession } from './store/auth'
 
 const NAV_ROUTES = ['/', '/discover', '/collections', '/stats', '/settings']
 
@@ -26,7 +25,6 @@ export default function App() {
     void libraryStore.getState().refresh()
     void useVaultSession.getState().init()
     void useCollections.getState().refreshPublic()
-    void restoreAuthSession()
   }, [])
 
   useEffect(() => {

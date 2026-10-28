@@ -1,7 +1,6 @@
 import { create, type StoreApi, type UseBoundStore } from 'zustand'
 import { listTitles, putPoster, putTitle, removePoster, removeTitle, type Zone } from '../lib/db'
 import type { TitleItem } from '../types'
-import { scheduleSync } from '../lib/autoSync'
 
 export interface ZoneState {
   zone: Zone
@@ -37,7 +36,6 @@ function createZoneStore(zone: Zone): ZoneStore {
       }
       const items = get().items.filter((i) => i.id !== next.id)
       set({ items: [next, ...items], ready: true })
-      if (zone === 'library') scheduleSync()
     },
     async patch(id, patch) {
       const current = get().items.find((i) => i.id === id) ?? (await listTitles(zone)).find((i) => i.id === id)
@@ -48,15 +46,10 @@ function createZoneStore(zone: Zone): ZoneStore {
         ? get().items.map((i) => (i.id === id ? next : i))
         : [next, ...get().items]
       set({ items })
-      if (zone === 'library') scheduleSync()
     },
     async remove(id) {
       await removeTitle(zone, id)
-      if (zone === 'library') {
-        void import('../lib/sync').then((m) => m.markDeleted(id)).catch(() => undefined)
-      }
       set({ items: get().items.filter((i) => i.id !== id) })
-      if (zone === 'library') scheduleSync()
     },
     clearMemory() {
       set({ items: [], ready: false })

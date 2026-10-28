@@ -3,12 +3,19 @@
 只收藏，不播放。记录你看过的每一部电影与剧集，带一个完全隐蔽的隐私保险箱。
 
 **仓库**：https://github.com/Risun666/reelvault
-**APK 下载**：https://github.com/Risun666/reelvault/releases/latest
-（`app-release.apk` 2.9MB · `app-debug.apk` 3.6MB，安装时允许「未知来源」即可）
+**APK 下载**（三选一，均为同一版本）：
+
+| 渠道 | 地址 | 提取码 |
+| --- | --- | --- |
+| GitHub Releases | https://github.com/Risun666/reelvault/releases/latest | — |
+| 百度网盘 | https://pan.baidu.com/s/1JUK0rsdoY91RbHobr2JLlQ?pwd=4wjf | `4wjf` |
+| 夸克网盘 | https://pan.quark.cn/s/36d68dbdb221 | — |
+
+`app-release.apk` 约 2.9MB，安装时允许「未知来源」即可。App 内「设置 → 检查更新」也能直接跳这三个渠道。
 
 - 前端：React 18 + TypeScript + Vite + Tailwind
-- 数据：IndexedDB（本地优先），隐私区与主库物理隔离
-- 云同步：WorkBuddy Cloud（登录后才启用，隐私区永不上云）
+- 数据：IndexedDB（本地优先），**不联网、不上传**，数据只在本机
+- 更新：内置检查更新，对比 GitHub Releases 版本号
 - 移动端：PWA（可添加到主屏幕）+ Capacitor 打包 Android APK
 
 ## 本地开发
@@ -85,7 +92,7 @@ npx cap copy android      # 只拷贝前端产物
 ## 已知平台边界
 
 - **保险箱 PIN** 依赖 WebCrypto，必须在安全上下文（`https://` 或 `localhost`）下运行。Capacitor 默认以 `https://localhost` 提供服务，APK 内可正常使用。
-- **云同步登录**走 OAuth 回调，回调地址指向已发布的 HTTPS 域名。在 APK 内登录可能无法正常回跳，请以 PWA / 网页版为准；本地片库与保险箱功能不受影响。
+- **检查更新**会访问 `api.github.com`（连不上时自动试公开镜像）。若全部不通，界面仍会列出三个下载渠道，可直接手动前往。
 - Debug APK 使用自动生成的调试签名，手机上需允许「未知来源」安装。
 
 ## 目录速览

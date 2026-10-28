@@ -92,6 +92,29 @@ async function main() {
   const { createRoot } = await import('react-dom/client')
   const App = (await import('../src/App')).default
 
+  // 用假数据模拟 GitHub Releases，验证「检查更新」链路
+  safeSet(
+    'fetch',
+    (async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        tag_name: 'v9.9.9',
+        name: 'v9.9.9',
+        html_url: 'https://github.com/Risun666/reelvault/releases/tag/v9.9.9',
+        body: '冒烟测试用的更新说明',
+        published_at: new Date().toISOString(),
+        assets: [
+          {
+            name: 'app-release.apk',
+            browser_download_url: 'https://example.com/app-release.apk',
+            size: 3_000_000
+          }
+        ]
+      })
+    })) as unknown as typeof fetch
+  )
+
   const root = createRoot(document.getElementById('root')!)
   root.render(createElement(App))
   await tick(400)
@@ -120,8 +143,15 @@ async function main() {
   assert(body().includes('TMDB API Key'), '设置页渲染')
   assert(body().includes('导出 JSON 备份'), '备份入口渲染')
   assert(body().includes('创建隐私空间'), '隐私空间引导渲染')
-  assert(body().includes('多设备云同步'), '云同步区块渲染')
+  assert(body().includes('检查更新'), '检查更新区块渲染')
+  assert(body().includes('百度网盘'), '百度网盘下载渠道渲染')
+  assert(body().includes('夸克网盘'), '夸克网盘下载渠道渲染')
   assert(body().includes('外观'), '外观设置区块渲染')
+
+  await tick(800)
+  assert(body().includes('v9.9.9'), '检查更新识别到新版本')
+  assert(body().includes('app-release.apk'), '新版本 APK 信息渲染')
+  assert(body().includes('2.86 MB'), 'APK 体积格式化正确')
 
   console.log('5) 路由切换 /vault（未配置 PIN）')
   window.location.hash = '#/vault'

@@ -12,8 +12,9 @@ import Icon from '../components/Icon'
 import { Button, Confirm, Field, Segmented, Sheet, inputCls } from '../components/ui'
 import { toast } from '../components/Toast'
 import { DEFAULT_API_BASE, probeAll, type ProbeResult } from '../lib/tmdb'
-import CloudSyncPanel from '../components/CloudSyncPanel'
 import AppearancePanel from '../components/AppearancePanel'
+import UpdatePanel from '../components/UpdatePanel'
+import { APP_VERSION } from '../lib/updater'
 
 type VaultMode = 'none' | 'encrypted' | 'plain'
 
@@ -151,7 +152,7 @@ export default function Settings() {
         <p className="mt-0.5 text-[0.75rem] text-ink-faint">数据全部保存在本机，随时可导出带走</p>
       </header>
 
-      <CloudSyncPanel />
+      <UpdatePanel />
 
       {/* 数据来源 */}
       <Group title="数据来源">
@@ -355,7 +356,7 @@ export default function Settings() {
           装到手机：iPhone 用 Safari 打开后点「分享 → 添加到主屏幕」，Android 用 Chrome 菜单里的「安装应用」。
         </p>
         <button onClick={onVersionTap} className="mt-3 text-[0.6875rem] text-ink-faint/70">
-          影匣 ReelVault v1.0.0
+          影匣 ReelVault v{APP_VERSION}
         </button>
       </div>
 

@@ -6,7 +6,6 @@ import {
 } from '../lib/db'
 import type { Collection, TitleItem } from '../types'
 import { newId } from '../types'
-import { scheduleSync } from '../lib/autoSync'
 
 interface CollectionState {
   items: Collection[]
@@ -57,17 +56,11 @@ export const useCollections = create<CollectionState>((set, get) => ({
     const next: Collection = { ...item, updatedAt: new Date().toISOString() }
     await putCollection(next)
     set({ items: get().items.map((i) => (i.id === next.id ? next : i)) })
-    if (next.zone !== 'vault') scheduleSync()
   },
 
   async remove(id) {
-    const target = get().items.find((i) => i.id === id)
     await removeCollection(id)
-    if (target && target.zone !== 'vault') {
-      void import('../lib/sync').then((m) => m.markCollectionDeleted(id)).catch(() => undefined)
-    }
     set({ items: get().items.filter((i) => i.id !== id) })
-    if (!target || target.zone !== 'vault') scheduleSync()
   },
 
   async toggleItem(collectionId, titleId) {

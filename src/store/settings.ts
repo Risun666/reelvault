@@ -13,8 +13,6 @@ export interface SettingsShape {
   view: 'grid' | 'list'
   /** 搜索结果是否包含成人分级条目 */
   includeAdult: boolean
-  /** 登录状态下是否自动同步 */
-  autoSync: boolean
 }
 
 const KEY = 'rv.settings.v1'
@@ -26,8 +24,7 @@ const DEFAULTS: SettingsShape = {
   autoEndpoint: true,
   cacheRemotePoster: true,
   view: 'grid',
-  includeAdult: true,
-  autoSync: true
+  includeAdult: true
 }
 
 function load(): SettingsShape {
