@@ -1,0 +1,121 @@
+name: Android APK
+
+on:
+  push:
+    branches: [main, master]
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      release:
+        description: '同时构建签名 Release 版'
+        type: boolean
+        default: false
+
+jobs:
+  build:
+    name: 构建 APK
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 准备 JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - name: 准备 Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: 安装依赖
+        run: npm ci
+
+      - name: 类型检查
+        run: npx tsc --noEmit
+
+      - name: 构建前端
+        run: npm run build
+
+      - name: 同步到 Android 工程
+        run: npx cap sync android
+
+      - name: 准备签名密钥（Release 用）
+        if: ${{ github.event.inputs.release == 'true' || startsWith(github.ref, 'refs/tags/v') }}
+        env:
+          KS_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KS_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KS_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KS_KEY_PASS: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [ -n "$KS_B64" ] && [ -n "$KS_ALIAS" ]; then
+            echo "$KS_B64" | base64 -d > android/app/reelvault.jks
+            echo "RELEASE_STORE_FILE=app/reelvault.jks" >> $GITHUB_ENV
+            echo "RELEASE_STORE_PASSWORD=$KS_PASS" >> $GITHUB_ENV
+            echo "RELEASE_KEY_ALIAS=$KS_ALIAS" >> $GITHUB_ENV
+            echo "RELEASE_KEY_PASSWORD=$KS_KEY_PASS" >> $GITHUB_ENV
+            echo "使用仓库 Secrets 中配置的正式密钥签名"
+          else
+            keytool -genkeypair -v \
+              -keystore android/app/reelvault.jks \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -alias reelvault \
+              -storepass reelvault -keypass reelvault \
+              -dname "CN=ReelVault, OU=App, O=ReelVault, L=, S=, C=CN"
+            echo "RELEASE_STORE_FILE=app/reelvault.jks" >> $GITHUB_ENV
+            echo "RELEASE_STORE_PASSWORD=reelvault" >> $GITHUB_ENV
+            echo "RELEASE_KEY_ALIAS=reelvault" >> $GITHUB_ENV
+            echo "RELEASE_KEY_PASSWORD=reelvault" >> $GITHUB_ENV
+            echo "::warning::未配置 ANDROID_KEYSTORE_BASE64 等 Secrets，本次使用临时密钥签名。跨次构建的 APK 签名不同，覆盖安装前需先卸载旧版。仓库 Settings → Secrets and variables → Actions 里配置后可固定签名。"
+          fi
+
+      - name: 赋权 gradlew
+        run: chmod +x android/gradlew
+
+      - name: 构建 Debug APK
+        run: ./gradlew assembleDebug --no-daemon --stacktrace
+        working-directory: android
+
+      - name: 构建 Release APK
+        if: ${{ github.event.inputs.release == 'true' || startsWith(github.ref, 'refs/tags/v') }}
+        run: ./gradlew assembleRelease --no-daemon --stacktrace
+        working-directory: android
+
+      - name: 上传 Debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: reelvault-debug
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+
+      - name: 上传 Release APK
+        if: ${{ github.event.inputs.release == 'true' || startsWith(github.ref, 'refs/tags/v') }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: reelvault-release
+          path: android/app/build/outputs/apk/release/app-release.apk
+          if-no-files-found: error
+
+      - name: 发布到 Releases
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            android/app/build/outputs/apk/debug/app-debug.apk
+            android/app/build/outputs/apk/release/app-release.apk
+          generate_release_notes: true
+
+      - name: 输出下载提示
+        run: |
+          echo "### 影匣 APK 构建完成" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Debug**：本页 Artifacts 区 → \`reelvault-debug\` → 下载 \`app-debug.apk\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **安装**：手机上允许「未知来源」，用文件管理器点开 APK 即可" >> $GITHUB_STEP_SUMMARY
+          echo "- **注意**：Debug 使用调试签名，跨次构建的签名不同，覆盖安装前请先卸载旧版" >> $GITHUB_STEP_SUMMARY

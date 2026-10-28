@@ -1,0 +1,17 @@
+# 统一换行，避免 Windows 提交的 CRLF 让 Linux 上的 gradlew 跑不起来
+* text=auto eol=lf
+
+*.bat text eol=crlf
+*.cmd text eol=crlf
+android/gradlew text eol=lf
+
+# 二进制
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.ico binary
+*.jar binary
+*.jks binary
+*.keystore binary
+*.apk binary

@@ -1,0 +1,33 @@
+node_modules/
+dist/
+
+# 工具链产生的本地记录
+.workbuddy/
+dev-dist/
+.vite/
+
+# Capacitor 原生产物
+android/app/build/
+android/app/src/main/assets/public/
+android/.gradle/
+android/build/
+android/local.properties
+android/app/release/
+android/.idea/
+android/*.iml
+*.apk
+*.aab
+*.jks
+*.keystore
+
+# TypeScript
+tsconfig.tsbuildinfo
+*.tsbuildinfo
+
+# 日志与临时文件
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db
+.env
+.env.local

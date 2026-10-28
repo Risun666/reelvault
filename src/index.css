@@ -1,0 +1,229 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ------------------------------ 主题变量 ------------------------------ */
+
+:root {
+  color-scheme: light;
+
+  --rv-bg: 247 246 243;
+  --rv-card: 255 255 255;
+  --rv-line: 231 228 222;
+  --rv-ink: 27 28 31;
+  --rv-ink-soft: 74 77 85;
+  --rv-ink-faint: 139 143 153;
+  --rv-shadow: 27 28 31;
+  --rv-moss: 75 127 99;
+
+  --rv-accent: 192 69 58;
+  --rv-accent-dark: 150 51 43;
+  --rv-accent-soft: 251 238 236;
+
+  --rv-radius-lg: 0.625rem;
+  --rv-radius-xl: 0.875rem;
+  --rv-radius-2xl: 1.125rem;
+  --rv-font-scale: 1;
+}
+
+/* 胶片暖：偏黄纸质 */
+[data-theme='sepia'] {
+  --rv-bg: 244 238 228;
+  --rv-card: 253 250 244;
+  --rv-line: 226 215 197;
+  --rv-ink: 45 36 26;
+  --rv-ink-soft: 88 74 58;
+  --rv-ink-faint: 141 126 106;
+  --rv-shadow: 60 45 28;
+  --rv-moss: 90 118 74;
+  --rv-accent: 176 74 40;
+  --rv-accent-dark: 132 52 26;
+  --rv-accent-soft: 249 234 220;
+}
+
+/* 深色 */
+[data-theme='dark'] {
+  color-scheme: dark;
+  --rv-bg: 17 18 20;
+  --rv-card: 27 28 31;
+  --rv-line: 45 47 52;
+  --rv-ink: 240 240 238;
+  --rv-ink-soft: 176 179 186;
+  --rv-ink-faint: 121 125 133;
+  --rv-shadow: 0 0 0;
+  --rv-moss: 106 158 128;
+  --rv-accent: 224 106 90;
+  --rv-accent-dark: 240 146 132;
+  --rv-accent-soft: 48 30 28;
+}
+
+/* 强调色 */
+[data-accent='ink'] {
+  --rv-accent: 39 41 46;
+  --rv-accent-dark: 22 23 26;
+  --rv-accent-soft: 232 233 235;
+}
+[data-accent='moss'] {
+  --rv-accent: 63 112 84;
+  --rv-accent-dark: 43 82 60;
+  --rv-accent-soft: 232 241 235;
+}
+[data-accent='indigo'] {
+  --rv-accent: 66 84 168;
+  --rv-accent-dark: 46 61 133;
+  --rv-accent-soft: 232 235 247;
+}
+[data-accent='amber'] {
+  --rv-accent: 186 122 32;
+  --rv-accent-dark: 138 88 18;
+  --rv-accent-soft: 250 240 220;
+}
+[data-theme='dark'][data-accent='ink'] {
+  --rv-accent: 224 226 232;
+  --rv-accent-dark: 244 245 248;
+  --rv-accent-soft: 44 46 51;
+}
+[data-theme='dark'][data-accent='moss'] {
+  --rv-accent: 110 168 132;
+  --rv-accent-dark: 152 200 170;
+  --rv-accent-soft: 26 40 31;
+}
+[data-theme='dark'][data-accent='indigo'] {
+  --rv-accent: 137 153 217;
+  --rv-accent-dark: 173 186 234;
+  --rv-accent-soft: 28 32 50;
+}
+[data-theme='dark'][data-accent='amber'] {
+  --rv-accent: 214 165 92;
+  --rv-accent-dark: 234 197 143;
+  --rv-accent-soft: 45 35 21;
+}
+
+/* 圆角 */
+[data-radius='sharp'] {
+  --rv-radius-lg: 0.25rem;
+  --rv-radius-xl: 0.375rem;
+  --rv-radius-2xl: 0.5rem;
+}
+[data-radius='round'] {
+  --rv-radius-lg: 0.875rem;
+  --rv-radius-xl: 1.25rem;
+  --rv-radius-2xl: 1.5rem;
+}
+
+/* 字号 */
+[data-scale='sm'] {
+  --rv-font-scale: 0.92;
+}
+[data-scale='md'] {
+  --rv-font-scale: 1;
+}
+[data-scale='lg'] {
+  --rv-font-scale: 1.09;
+}
+[data-scale='xl'] {
+  --rv-font-scale: 1.18;
+}
+
+html {
+  font-size: calc(16px * var(--rv-font-scale));
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: rgb(var(--rv-bg));
+  color: rgb(var(--rv-ink));
+  -webkit-tap-highlight-color: transparent;
+  -webkit-font-smoothing: antialiased;
+  overscroll-behavior-y: none;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+* {
+  -webkit-touch-callout: none;
+}
+
+input,
+textarea,
+select {
+  -webkit-touch-callout: auto;
+  font-size: 1rem;
+}
+
+::placeholder {
+  color: rgb(var(--rv-ink-faint) / 0.8);
+}
+
+/* 深色下的图片与表单 */
+[data-theme='dark'] select option {
+  background: rgb(var(--rv-card));
+  color: rgb(var(--rv-ink));
+}
+
+@layer utilities {
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .pb-safe {
+    padding-bottom: calc(env(safe-area-inset-bottom) + 0.5rem);
+  }
+  .pt-safe {
+    padding-top: calc(env(safe-area-inset-top) + 0.5rem);
+  }
+  .fade-in {
+    animation: fadeIn 0.18s ease-out both;
+  }
+  .slide-up {
+    animation: slideUp 0.24s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(14px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    rgb(var(--rv-line)) 25%,
+    rgb(var(--rv-bg)) 37%,
+    rgb(var(--rv-line)) 63%
+  );
+  background-size: 400% 100%;
+  animation: shimmer 1.4s ease infinite;
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0 50%;
+  }
+}

@@ -1,0 +1,5 @@
+appId: wbapp_pfUZ07hetq7PqC7LsUGV6s
+name: 影匣
+localDir: C:\Users\DELL\WorkBuddy\2026-10-28-20-11-18
+appType: web
+entryHtml: dist/index.html

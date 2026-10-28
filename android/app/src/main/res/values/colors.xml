@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 与网页端 CSS 变量保持一致：墨黑 / 朱红 / 纸白 -->
+    <color name="colorPrimary">#1B1C1F</color>
+    <color name="colorPrimaryDark">#111214</color>
+    <color name="colorAccent">#C0453A</color>
+    <color name="rvPaper">#F7F6F3</color>
+    <color name="rvInk">#1B1C1F</color>
+</resources>

@@ -1,0 +1,63 @@
+import { create } from 'zustand'
+import { DEFAULT_API_BASE, DEFAULT_IMAGE_BASE } from '../lib/tmdb'
+
+export interface SettingsShape {
+  apiKey: string
+  apiBase: string
+  imageBase: string
+  /** 详情页是否自动缓存 TMDB 远程海报到本地 */
+  cacheRemotePoster: boolean
+  /** 网格视图：grid | list */
+  view: 'grid' | 'list'
+  /** 搜索结果是否包含成人分级条目 */
+  includeAdult: boolean
+  /** 登录状态下是否自动同步 */
+  autoSync: boolean
+}
+
+const KEY = 'rv.settings.v1'
+
+const DEFAULTS: SettingsShape = {
+  apiKey: '',
+  apiBase: DEFAULT_API_BASE,
+  imageBase: DEFAULT_IMAGE_BASE,
+  cacheRemotePoster: true,
+  view: 'grid',
+  includeAdult: true,
+  autoSync: true
+}
+
+function load(): SettingsShape {
+  try {
+    const raw = localStorage.getItem(KEY)
+    return raw ? { ...DEFAULTS, ...(JSON.parse(raw) as Partial<SettingsShape>) } : DEFAULTS
+  } catch {
+    return DEFAULTS
+  }
+}
+
+interface SettingsStore extends SettingsShape {
+  set: (patch: Partial<SettingsShape>) => void
+  reset: () => void
+}
+
+export const useSettings = create<SettingsStore>((set) => ({
+  ...load(),
+  set(patch) {
+    set(patch)
+    const next = { ...load(), ...patch }
+    try {
+      localStorage.setItem(KEY, JSON.stringify(next))
+    } catch {
+      /* 隐私模式下忽略 */
+    }
+  },
+  reset() {
+    set(DEFAULTS)
+    try {
+      localStorage.removeItem(KEY)
+    } catch {
+      /* noop */
+    }
+  }
+}))
