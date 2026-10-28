@@ -57,10 +57,10 @@ jobs:
         run: |
           if [ -n "$KS_B64" ] && [ -n "$KS_ALIAS" ]; then
             echo "$KS_B64" | base64 -d > android/app/reelvault.jks
-            echo "RELEASE_STORE_FILE=app/reelvault.jks" >> $GITHUB_ENV
             echo "RELEASE_STORE_PASSWORD=$KS_PASS" >> $GITHUB_ENV
             echo "RELEASE_KEY_ALIAS=$KS_ALIAS" >> $GITHUB_ENV
             echo "RELEASE_KEY_PASSWORD=$KS_KEY_PASS" >> $GITHUB_ENV
+            echo "RELEASE_STORE_FILE=reelvault.jks" >> $GITHUB_ENV
             echo "使用仓库 Secrets 中配置的正式密钥签名"
           else
             keytool -genkeypair -v \
@@ -69,10 +69,13 @@ jobs:
               -alias reelvault \
               -storepass reelvault -keypass reelvault \
               -dname "CN=ReelVault, OU=App, O=ReelVault, L=, S=, C=CN"
-            echo "RELEASE_STORE_FILE=app/reelvault.jks" >> $GITHUB_ENV
             echo "RELEASE_STORE_PASSWORD=reelvault" >> $GITHUB_ENV
             echo "RELEASE_KEY_ALIAS=reelvault" >> $GITHUB_ENV
             echo "RELEASE_KEY_PASSWORD=reelvault" >> $GITHUB_ENV
+            echo "RELEASE_STORE_PASSWORD=reelvault" >> $GITHUB_ENV
+            echo "RELEASE_KEY_ALIAS=reelvault" >> $GITHUB_ENV
+            echo "RELEASE_KEY_PASSWORD=reelvault" >> $GITHUB_ENV
+            echo "RELEASE_STORE_FILE=reelvault.jks" >> $GITHUB_ENV
             echo "::warning::未配置 ANDROID_KEYSTORE_BASE64 等 Secrets，本次使用临时密钥签名。跨次构建的 APK 签名不同，覆盖安装前需先卸载旧版。仓库 Settings → Secrets and variables → Actions 里配置后可固定签名。"
           fi
 

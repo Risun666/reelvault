@@ -21,7 +21,10 @@ android {
             // 由 CI 环境变量注入；本地构建未提供时会退化为未签名
             def storePath = System.getenv('RELEASE_STORE_FILE')
             if (storePath) {
-                storeFile file(storePath)
+                // file() 在模块里相对 android/app 解析，再兜一层工程根目录
+                def f = file(storePath)
+                if (!f.exists()) f = rootProject.file(storePath)
+                storeFile f
                 storePassword System.getenv('RELEASE_STORE_PASSWORD')
                 keyAlias System.getenv('RELEASE_KEY_ALIAS')
                 keyPassword System.getenv('RELEASE_KEY_PASSWORD')
