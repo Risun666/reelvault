@@ -35,6 +35,9 @@ export type IconName =
   | 'eyeOff'
   | 'refresh'
   | 'share'
+  | 'github'
+  | 'mail'
+  | 'user'
 
 const PATHS: Record<IconName, string> = {
   home: 'M3 10.5 12 3l9 7.5V21a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z',
@@ -66,13 +69,16 @@ const PATHS: Record<IconName, string> = {
   tag: 'M4 11.5 11.5 4H20v8.5L12.5 20 4 11.5ZM15.5 8.5h.01',
   eyeOff: 'M3 3l18 18M10.6 6.2A9.6 9.6 0 0 1 12 6c5 0 9 6 9 6a15 15 0 0 1-2.4 3M6.5 7.9A15.6 15.6 0 0 0 3 12s4 6 9 6a9.3 9.3 0 0 0 3.4-.6M9.9 9.9a3 3 0 0 0 4.2 4.2',
   refresh: 'M4 12a8 8 0 0 1 13.7-5.7L20 8M20 4v4h-4M20 12a8 8 0 0 1-13.7 5.7L4 16m0 4v-4h4',
-  share: 'M12 3v13m0-13 4 4m-4-4-4 4M5 15v4h14v-4'
+  share: 'M12 3v13m0-13 4 4m-4-4-4 4M5 15v4h14v-4',
+  github: 'M12 2a10 10 0 0 0-3.16 19.49c.5.09.68-.22.68-.48v-1.7c-2.78.6-3.37-1.34-3.37-1.34-.45-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.89 1.53 2.34 1.09 2.91.83.09-.65.35-1.09.64-1.34-2.22-.25-4.56-1.11-4.56-4.94 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.65 0 0 .84-.27 2.75 1.02a9.5 9.5 0 0 1 5 0c1.91-1.29 2.75-1.02 2.75-1.02.55 1.38.2 2.4.1 2.65.64.7 1.03 1.59 1.03 2.68 0 3.84-2.35 4.69-4.58 4.93.36.31.68.92.68 1.85v2.74c0 .27.18.58.69.48A10 10 0 0 0 12 2Z',
+  mail: 'M3 5h18a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Zm1.7 2L12 12.3 19.3 7H4.7Z',
+  user: 'M12 4a4 4 0 1 1 0 8 4 4 0 0 1 0-8Zm0 10c4.42 0 8 2.24 8 5v1H4v-1c0-2.76 3.58-5 8-5Z'
 }
 
 const STROKE_ONLY: IconName[] = [
   'home', 'chart', 'plus', 'search', 'close', 'check', 'trash', 'edit', 'download', 'upload',
   'chevronLeft', 'chevronRight', 'film', 'tv', 'filter', 'grid', 'list', 'calendar', 'clock',
-  'image', 'tag', 'eyeOff', 'refresh', 'share', 'star'
+  'image', 'tag', 'eyeOff', 'refresh', 'share', 'star', 'mail', 'user'
 ]
 
 export default function Icon({ name, className = '', size = 22 }: Props) {

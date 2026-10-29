@@ -1,0 +1,9 @@
+name = "reelvault-jav"
+main = "jav-worker.js"
+compatibility_date = "2024-09-01"
+
+# 部署：cd workers && npx wrangler deploy --config wrangler-jav.toml
+# 部署后在 Cloudflare 面板绑定自定义域名，*.workers.dev 在大陆不稳定
+#
+# 可选：设置访问令牌
+#   npx wrangler secret put JAV_TOKEN --config wrangler-jav.toml

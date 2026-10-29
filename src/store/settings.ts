@@ -13,6 +13,15 @@ export interface SettingsShape {
   view: 'grid' | 'list'
   /** 搜索结果是否包含成人分级条目 */
   includeAdult: boolean
+
+  /** 是否使用内置 API Key（关掉则用下面自定义的那一个） */
+  useBuiltInKey: boolean
+
+  /** 番号刮削（隐私区用） */
+  javEnabled: boolean
+  javEndpoint: string
+  javSource: 'auto' | 'javdb' | 'dmm'
+  javToken: string
 }
 
 const KEY = 'rv.settings.v1'
@@ -24,7 +33,14 @@ const DEFAULTS: SettingsShape = {
   autoEndpoint: true,
   cacheRemotePoster: true,
   view: 'grid',
-  includeAdult: true
+  includeAdult: true,
+
+  useBuiltInKey: true,
+
+  javEnabled: false,
+  javEndpoint: '',
+  javSource: 'auto',
+  javToken: ''
 }
 
 function load(): SettingsShape {

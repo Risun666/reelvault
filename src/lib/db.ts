@@ -1,5 +1,5 @@
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb'
-import type { Collection, TitleItem } from '../types'
+import type { Collection, Person, TitleItem } from '../types'
 
 interface RVDB extends DBSchema {
   titles: {
@@ -14,6 +14,12 @@ interface RVDB extends DBSchema {
     value: Collection
     indexes: { 'by-updated': string; 'by-zone': string }
   }
+  people: {
+    key: string
+    value: Person
+    indexes: { 'by-name': string; 'by-updated': string }
+  }
+  avatars: { key: string; value: Blob }
 
   vtitles: {
     key: string
@@ -22,10 +28,16 @@ interface RVDB extends DBSchema {
   }
   vposters: { key: string; value: Blob }
   vmeta: { key: string; value: unknown }
+  vpeople: {
+    key: string
+    value: Person
+    indexes: { 'by-name': string; 'by-updated': string }
+  }
+  vavatars: { key: string; value: Blob }
 }
 
 const DB_NAME = 'reelvault'
-const DB_VERSION = 2
+const DB_VERSION = 3
 
 let dbPromise: Promise<IDBPDatabase<RVDB>> | null = null
 
@@ -62,6 +74,20 @@ export function db() {
           s.createIndex('by-updated', 'updatedAt')
           s.createIndex('by-zone', 'zone')
         }
+        // 演员：公开区与隐私区各一套，物理隔离
+        for (const [store, avatarStore] of [
+          ['people', 'avatars'],
+          ['vpeople', 'vavatars']
+        ] as const) {
+          if (!database.objectStoreNames.contains(store)) {
+            const s = database.createObjectStore(store, { keyPath: 'id' })
+            s.createIndex('by-name', 'name')
+            s.createIndex('by-updated', 'updatedAt')
+          }
+          if (!database.objectStoreNames.contains(avatarStore)) {
+            database.createObjectStore(avatarStore)
+          }
+        }
       }
     })
   }
@@ -72,8 +98,20 @@ export function db() {
 export type Zone = 'library' | 'vault'
 
 const ZONE_MAP = {
-  library: { title: 'titles', poster: 'posters', meta: 'meta' },
-  vault: { title: 'vtitles', poster: 'vposters', meta: 'vmeta' }
+  library: {
+    title: 'titles',
+    poster: 'posters',
+    meta: 'meta',
+    person: 'people',
+    avatar: 'avatars'
+  },
+  vault: {
+    title: 'vtitles',
+    poster: 'vposters',
+    meta: 'vmeta',
+    person: 'vpeople',
+    avatar: 'vavatars'
+  }
 } as const
 
 export async function listTitles(zone: Zone): Promise<TitleItem[]> {
@@ -202,9 +240,101 @@ export async function clearZone(zone: Zone): Promise<void> {
   const database = await db()
   const t = ZONE_MAP[zone].title as 'titles'
   const p = ZONE_MAP[zone].poster as 'posters'
-  const tx = database.transaction([t, p], 'readwrite')
+  const pe = ZONE_MAP[zone].person as 'people'
+  const av = ZONE_MAP[zone].avatar as 'avatars'
+  const tx = database.transaction([t, p, pe, av], 'readwrite')
   await tx.objectStore(t).clear()
   await tx.objectStore(p).clear()
+  await tx.objectStore(pe).clear()
+  await tx.objectStore(av).clear()
   await tx.done
   for (const id of [...posterUrlCache.keys()]) releasePosterUrl(id)
+  for (const id of [...avatarUrlCache.keys()]) releaseAvatarUrl(id)
+}
+
+/* ----------------------------- 演员 ----------------------------- */
+
+export async function listPeople(zone: Zone): Promise<Person[]> {
+  const database = await db()
+  const rows = await database.getAll(ZONE_MAP[zone].person as 'people')
+  return rows.sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1))
+}
+
+export async function getPerson(zone: Zone, id: string): Promise<Person | undefined> {
+  const database = await db()
+  return database.get(ZONE_MAP[zone].person as 'people', id)
+}
+
+export async function putPerson(zone: Zone, item: Person): Promise<void> {
+  const database = await db()
+  await database.put(ZONE_MAP[zone].person as 'people', item)
+}
+
+export async function removePerson(zone: Zone, id: string): Promise<void> {
+  const database = await db()
+  const store = ZONE_MAP[zone].person as 'people'
+  const tx = database.transaction([store, ZONE_MAP[zone].avatar as 'avatars'], 'readwrite')
+  await tx.objectStore(store).delete(id)
+  await tx.objectStore(ZONE_MAP[zone].avatar as 'avatars').delete(id)
+  await tx.done
+  releaseAvatarUrl(id)
+}
+
+export async function putAvatar(zone: Zone, id: string, blob: Blob): Promise<void> {
+  const database = await db()
+  await database.put(ZONE_MAP[zone].avatar as 'avatars', blob, id)
+  releaseAvatarUrl(id)
+}
+
+export async function getAvatarBlob(zone: Zone, id: string): Promise<Blob | undefined> {
+  const database = await db()
+  return database.get(ZONE_MAP[zone].avatar as 'avatars', id)
+}
+
+export async function removeAvatar(zone: Zone, id: string): Promise<void> {
+  const database = await db()
+  await database.delete(ZONE_MAP[zone].avatar as 'avatars', id)
+  releaseAvatarUrl(id)
+}
+
+const avatarUrlCache = new Map<string, string>()
+
+/** 头像的可直接展示 URL，内部缓存，替换时回收 */
+export async function avatarUrl(zone: Zone, id: string): Promise<string | null> {
+  const key = `av:${zone}:${id}`
+  const cached = avatarUrlCache.get(key)
+  if (cached) return cached
+  const blob = await getAvatarBlob(zone, id)
+  if (!blob) return null
+  const url = URL.createObjectURL(blob)
+  avatarUrlCache.set(key, url)
+  return url
+}
+
+function releaseAvatarUrl(rawId: string) {
+  // 入参可能是 `av:zone:id` 形式，也可能是纯 id
+  if (rawId.startsWith('av:')) {
+    const url = avatarUrlCache.get(rawId)
+    if (url) {
+      URL.revokeObjectURL(url)
+      avatarUrlCache.delete(rawId)
+    }
+    return
+  }
+  for (const zone of ['library', 'vault'] as const) {
+    const key = `av:${zone}:${rawId}`
+    const url = avatarUrlCache.get(key)
+    if (url) {
+      URL.revokeObjectURL(url)
+      avatarUrlCache.delete(key)
+    }
+  }
+}
+
+/** 按名字查找演员（同区去重用） */
+export async function findPersonByName(zone: Zone, name: string): Promise<Person | undefined> {
+  const target = name.trim().toLowerCase()
+  if (!target) return undefined
+  const rows = await listPeople(zone)
+  return rows.find((p) => p.name.trim().toLowerCase() === target)
 }

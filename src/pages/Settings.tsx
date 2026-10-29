@@ -12,9 +12,10 @@ import Icon from '../components/Icon'
 import { Button, Confirm, Field, Segmented, Sheet, inputCls } from '../components/ui'
 import { toast } from '../components/Toast'
 import { DEFAULT_API_BASE, probeAll, type ProbeResult } from '../lib/tmdb'
+import { testJav, type JavSource } from '../lib/jav'
 import AppearancePanel from '../components/AppearancePanel'
 import UpdatePanel from '../components/UpdatePanel'
-import { APP_VERSION } from '../lib/updater'
+import { APP_VERSION, RELEASES_URL, AUTHOR_MAIL } from '../lib/updater'
 
 type VaultMode = 'none' | 'encrypted' | 'plain'
 
@@ -30,6 +31,11 @@ export default function Settings() {
   const [advanced, setAdvanced] = useState(false)
   const [probes, setProbes] = useState<ProbeResult[] | null>(null)
   const [probing, setProbing] = useState(false)
+
+  const [javEndpointDraft, setJavEndpointDraft] = useState(settings.javEndpoint)
+  const [javTokenDraft, setJavTokenDraft] = useState(settings.javToken)
+  const [javTesting, setJavTesting] = useState(false)
+  const [javTestMsg, setJavTestMsg] = useState<string | null>(null)
 
   const [exportSheet, setExportSheet] = useState(false)
   const [exportPosters, setExportPosters] = useState(true)
@@ -52,10 +58,6 @@ export default function Settings() {
   }, [])
 
   const runProbe = async () => {
-    if (!settings.apiKey) {
-      toast('请先填写 TMDB API Key', 'bad')
-      return
-    }
     setProbing(true)
     try {
       const list = await probeAll(settings)
@@ -79,6 +81,28 @@ export default function Settings() {
       toast(e instanceof Error ? e.message : '测速失败', 'bad')
     } finally {
       setProbing(false)
+    }
+  }
+
+  const runJavTest = async () => {
+    const endpoint = javEndpointDraft.trim()
+    if (!endpoint) {
+      toast('先填刮削服务地址', 'bad')
+      return
+    }
+    setJavTesting(true)
+    setJavTestMsg(null)
+    try {
+      const res = await testJav({
+        enabled: true,
+        endpoint,
+        source: settings.javSource,
+        token: javTokenDraft
+      })
+      setJavTestMsg(res.ok ? `可用（${res.ms}ms）` : `不可用：${res.message}`)
+      toast(res.ok ? '刮削服务可用' : res.message, res.ok ? 'good' : 'bad')
+    } finally {
+      setJavTesting(false)
     }
   }
 
@@ -156,18 +180,28 @@ export default function Settings() {
 
       {/* 数据来源 */}
       <Group title="数据来源">
-        <Field label="TMDB API Key">
-          <input
-            value={keyDraft}
-            onChange={(e) => setKeyDraft(e.target.value)}
-            onBlur={() => settings.set({ apiKey: keyDraft.trim() })}
-            placeholder="粘贴你的 TMDB API Key"
-            className={inputCls}
-          />
-        </Field>
-        <p className="mb-3 text-[0.75rem] leading-relaxed text-ink-faint">
-          到 themoviedb.org 注册后在「Settings → API」免费申请。填一次即可自动拉取封面、简介、演员。
-        </p>
+        <ToggleRow
+          label="使用内置 API Key"
+          desc="已内置一个能直接用的 Key，不用自己去申请。需要更高额度或想用自己的账号时关掉它。"
+          value={settings.useBuiltInKey}
+          onChange={(v) => settings.set({ useBuiltInKey: v })}
+        />
+        {!settings.useBuiltInKey && (
+          <div className="mt-2">
+            <Field label="自定义 TMDB API Key">
+              <input
+                value={keyDraft}
+                onChange={(e) => setKeyDraft(e.target.value)}
+                onBlur={() => settings.set({ apiKey: keyDraft.trim() })}
+                placeholder="粘贴你的 TMDB API Key"
+                className={inputCls}
+              />
+            </Field>
+            <p className="text-[0.75rem] leading-relaxed text-ink-faint">
+              到 themoviedb.org 注册后在「Settings → API」免费申请。留空则自动回退到内置 Key。
+            </p>
+          </div>
+        )}
         {/* 接口节点测速 */}
         <div className="mb-3 rounded-xl border border-paper-line bg-paper/60 p-3">
           <div className="flex items-center justify-between gap-2">
@@ -279,6 +313,83 @@ export default function Settings() {
         />
       </Group>
 
+      {/* 番号刮削 */}
+      <Group title="番号刮削">
+        <ToggleRow
+          label="启用番号刮削"
+          desc="在隐私空间添加影片时，输入番号自动带出标题、封面、演员、片商。"
+          value={settings.javEnabled}
+          onChange={(v) => settings.set({ javEnabled: v })}
+        />
+
+        {settings.javEnabled && (
+          <div className="mt-3 space-y-3 border-t border-paper-line pt-3">
+            <Field label="刮削服务地址">
+              <input
+                value={javEndpointDraft}
+                onChange={(e) => setJavEndpointDraft(e.target.value)}
+                onBlur={() => settings.set({ javEndpoint: javEndpointDraft.trim() })}
+                placeholder="https://your-proxy.example.com"
+                className={inputCls}
+              />
+            </Field>
+
+            <div>
+              <div className="mb-1.5 text-[0.75rem] font-medium text-ink-faint">数据源</div>
+              <Segmented
+                value={settings.javSource}
+                onChange={(v) => settings.set({ javSource: v as JavSource })}
+                options={[
+                  { value: 'auto', label: '自动' },
+                  { value: 'javdb', label: 'JavDB' },
+                  { value: 'dmm', label: 'DMM' }
+                ]}
+              />
+            </div>
+
+            <Field label="访问令牌（可选）">
+              <input
+                value={javTokenDraft}
+                onChange={(e) => setJavTokenDraft(e.target.value)}
+                onBlur={() => settings.set({ javToken: javTokenDraft.trim() })}
+                placeholder="代理设了 JAV_TOKEN 才需要填"
+                className={inputCls}
+              />
+            </Field>
+
+            <Button
+              variant="outline"
+              className="w-full"
+              disabled={javTesting}
+              onClick={() => void runJavTest()}
+            >
+              <Icon name="refresh" size={15} /> {javTesting ? '测试中…' : '测试连接'}
+            </Button>
+
+            {javTestMsg && (
+              <p
+                className={clsx(
+                  'text-[0.75rem]',
+                  javTestMsg.startsWith('可用') ? 'text-moss' : 'text-reel'
+                )}
+              >
+                {javTestMsg}
+              </p>
+            )}
+
+            <div className="rounded-xl border border-reel/25 bg-reel-soft/60 p-3 text-[0.75rem] leading-relaxed text-ink-soft">
+              <div className="mb-1 font-medium text-reel-dark">使用前必读</div>
+              浏览器有跨域限制，抓不了这些站点，所以抓取发生在你<strong>自己部署的代理</strong>里
+              —— 仓库 <span className="font-mono">workers/jav-proxy.mjs</span> 是现成脚本，
+              放到境外 VPS 上 <span className="font-mono">node jav-proxy.mjs</span> 即可。
+              <div className="mt-1.5 text-ink-faint">
+                启用后输入的番号会发往你填的地址，请只填自己的服务。刮削只取元数据，不含任何下载或播放链接。
+              </div>
+            </div>
+          </div>
+        )}
+      </Group>
+
       <AppearancePanel />
 
       {/* 备份 */}
@@ -358,6 +469,23 @@ export default function Settings() {
         <button onClick={onVersionTap} className="mt-3 text-[0.6875rem] text-ink-faint/70">
           影匣 ReelVault v{APP_VERSION}
         </button>
+
+        <div className="mt-4 flex items-center justify-center gap-3">
+          <button
+            onClick={() => window.open(RELEASES_URL, '_blank', 'noopener,noreferrer')}
+            className="flex items-center gap-1.5 rounded-full border border-paper-line bg-white px-3 py-1.5 text-[0.75rem] text-ink-soft active:bg-paper"
+            title="打开 GitHub 仓库"
+          >
+            <Icon name="github" size={15} /> GitHub
+          </button>
+          <a
+            href={AUTHOR_MAIL}
+            className="flex items-center gap-1.5 rounded-full border border-paper-line bg-white px-3 py-1.5 text-[0.75rem] text-ink-soft active:bg-paper"
+            title="给作者发邮件"
+          >
+            <Icon name="mail" size={15} /> by 赵大阳
+          </a>
+        </div>
       </div>
 
       {/* 导出抽屉 */}

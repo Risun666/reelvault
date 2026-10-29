@@ -6,6 +6,8 @@ import { compressImage, fetchRemoteImage } from '../lib/image'
 import { pickImage } from '../lib/dom'
 import { zoneStore } from '../store/zone'
 import { useVaultSession } from '../store/vaultSession'
+import { useSettings } from '../store/settings'
+import { javToTitlePatch, scrapeJav } from '../lib/jav'
 import { blankTitle } from '../lib/addTitle'
 import type { MediaKind, TitleItem, WatchStatus } from '../types'
 import { STATUS_LABEL, STATUS_ORDER, newId } from '../types'
@@ -30,6 +32,9 @@ export default function AddItem() {
   const [tagText, setTagText] = useState('')
   const [saving, setSaving] = useState(false)
   const [loaded, setLoaded] = useState(!editing)
+  const settings = useSettings()
+  const [javCode, setJavCode] = useState('')
+  const [javBusy, setJavBusy] = useState(false)
 
   useEffect(() => {
     if (!id) return
@@ -71,6 +76,48 @@ export default function AddItem() {
       if (prev) URL.revokeObjectURL(prev)
       return URL.createObjectURL(blob)
     })
+  }
+
+  const runScrape = async () => {
+    if (!javCode.trim()) {
+      toast('先填番号', 'bad')
+      return
+    }
+    setJavBusy(true)
+    try {
+      const res = await scrapeJav(
+        {
+          enabled: true,
+          endpoint: settings.javEndpoint,
+          source: settings.javSource,
+          token: settings.javToken
+        },
+        javCode
+      )
+      const { tags, ...patch } = javToTitlePatch(res)
+      setDraft((d) => ({
+        ...d,
+        ...patch,
+        // 已有简介就不覆盖，避免把用户自己写的冲掉
+        overview: d.overview?.trim() ? d.overview : patch.overview
+      }))
+      if (patch.cast?.length) setCastText(patch.cast.join('、'))
+      if (patch.genres?.length) setGenreText(patch.genres.join('、'))
+      if (tags?.length) setTagText((prev) => (prev.trim() ? prev : tags.join('、')))
+      if (patch.posterRemote) {
+        setRemoteUrl(patch.posterRemote)
+        setPosterBlob(null)
+        setPosterPreview((prev) => {
+          if (prev) URL.revokeObjectURL(prev)
+          return null
+        })
+      }
+      toast(res.overview ? '已填充，确认后保存' : '已填充（该源无简介，可自己写）', 'good')
+    } catch (e) {
+      toast(e instanceof Error ? e.message : '刮削失败', 'bad')
+    } finally {
+      setJavBusy(false)
+    }
   }
 
   const save = async () => {
@@ -145,6 +192,31 @@ export default function AddItem() {
           ]}
         />
       </div>
+
+      {settings.javEnabled && (
+        <div className="mb-4 rounded-xl border border-reel/25 bg-reel-soft/60 p-3">
+          <div className="mb-2 flex items-center gap-1.5 text-[0.8125rem] font-medium text-reel-dark">
+            <Icon name="search" size={14} /> 按番号自动填充
+          </div>
+          <div className="flex gap-2">
+            <input
+              value={javCode}
+              onChange={(e) => setJavCode(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') void runScrape()
+              }}
+              placeholder="如 SSNI-589"
+              className={inputCls + ' flex-1 text-[0.8125rem]'}
+            />
+            <Button className="shrink-0" disabled={javBusy} onClick={() => void runScrape()}>
+              {javBusy ? '刮削中…' : '刮削'}
+            </Button>
+          </div>
+          <p className="mt-1.5 text-[0.6875rem] leading-relaxed text-ink-faint">
+            番号会发送到你在「设置 → 番号刮削」里填的服务地址。{settings.javEndpoint ? '' : '还没填地址，先去设置里配一个。'}
+          </p>
+        </div>
+      )}
 
       {/* 封面 */}
       <div className="mb-5 flex gap-3">

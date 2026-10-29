@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useVaultSession } from '../store/vaultSession'
 import { useVaultStore } from '../store/zone'
+import { vaultPeople } from '../store/people'
 import { clearZone, setMeta } from '../lib/db'
 import LibraryView from '../components/LibraryView'
 import Icon from '../components/Icon'
@@ -27,6 +28,7 @@ export default function VaultGate() {
   useEffect(() => {
     if (session.active) {
       void vault.refresh()
+      void vaultPeople.getState().refresh()
     }
   }, [session.active])
 
@@ -101,6 +103,7 @@ export default function VaultGate() {
               onClick={() => {
                 session.lock()
                 vault.clearMemory()
+                vaultPeople.getState().clearMemory()
                 toast('已上锁')
                 navigate('/')
               }}

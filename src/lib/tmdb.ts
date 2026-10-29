@@ -4,8 +4,27 @@ import type { MediaKind, TitleItem } from '../types'
 export const DEFAULT_API_BASE = 'https://api.tmdb.org/3'
 export const DEFAULT_IMAGE_BASE = 'https://image.tmdb.org/t/p'
 
+/**
+ * 内置 API Key：开箱即用，不用自己去申请。
+ * 万一哪天失效，在「设置 → 数据来源」关掉「使用内置 Key」换成自己的即可。
+ */
+export const BUILT_IN_API_KEY = '2e1228fac65f9bd3789920ff4bdbb20f'
+
+/** 实际生效的 Key：内置优先；关掉内置后用自定义，自定义为空时回退内置 */
+export function resolveApiKey(settings: TmdbSettings): string {
+  if (settings.useBuiltInKey !== false) return BUILT_IN_API_KEY
+  return settings.apiKey.trim() || BUILT_IN_API_KEY
+}
+
+/** 当前是否在使用内置 Key */
+export function isUsingBuiltInKey(settings: TmdbSettings): boolean {
+  return resolveApiKey(settings) === BUILT_IN_API_KEY
+}
+
 export interface TmdbSettings {
   apiKey: string
+  /** 使用内置 Key；false 时用 apiKey 字段 */
+  useBuiltInKey?: boolean
   apiBase?: string
   imageBase?: string
   includeAdult?: boolean
@@ -49,8 +68,9 @@ function norm(base: string | undefined, fallback: string): string {
 }
 
 function get(settings: TmdbSettings) {
-  if (!settings.apiKey) throw new TmdbError('未配置 TMDB API Key')
-  return { imageBase: norm(settings.imageBase, DEFAULT_IMAGE_BASE), key: settings.apiKey.trim() }
+  const key = resolveApiKey(settings)
+  if (!key) throw new TmdbError('未配置 TMDB API Key')
+  return { imageBase: norm(settings.imageBase, DEFAULT_IMAGE_BASE), key }
 }
 
 /* --------------------------- 网络层：超时 + 多节点降级 --------------------------- */
@@ -200,9 +220,10 @@ export async function probeEndpoint(base: string, key: string): Promise<Omit<Pro
 
 /** 并发测所有候选节点，返回按耗时升序的结果 */
 export async function probeAll(settings: TmdbSettings): Promise<ProbeResult[]> {
-  if (!settings.apiKey) throw new TmdbError('请先填写 API Key 再测速')
+  const key = resolveApiKey(settings)
+  if (!key) throw new TmdbError('请先填写 API Key 再测速')
   const bases = candidateBases(settings)
-  const results = await Promise.all(bases.map((b) => probeEndpoint(b, settings.apiKey)))
+  const results = await Promise.all(bases.map((b) => probeEndpoint(b, key)))
   const labelOf = (b: string) => {
     const hit = TMDB_ENDPOINTS.find((e) => e.api === b)
     if (hit) return hit.label

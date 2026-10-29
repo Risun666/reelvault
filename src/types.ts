@@ -66,6 +66,24 @@ export interface Collection {
   updatedAt: string
 }
 
+/** 演员 / 出演者。公开区与隐私区各自独立，互不打通 */
+export interface Person {
+  id: string
+  name: string
+  note?: string
+  /** 远程头像地址（本地头像丢失时的兜底） */
+  avatarRemote?: string
+  hasLocalAvatar?: boolean
+  /** 关联影片 id，顺序即展示顺序 */
+  titleIds: string[]
+  birthday?: string
+  tags?: string[]
+  /** manual 手动添加；auto 从片库自动生成 */
+  source: 'manual' | 'auto'
+  createdAt: string
+  updatedAt: string
+}
+
 export const STATUS_LABEL: Record<WatchStatus, string> = {
   wish: '想看',
   watching: '在看',

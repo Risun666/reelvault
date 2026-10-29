@@ -5,11 +5,14 @@
 import 'fake-indexeddb/auto'
 import {
   listCollections,
+  listPeople,
   listTitles,
   putTitle,
   putPoster,
   putCollection,
+  putPerson,
   removeCollection,
+  removePerson,
   clearZone,
   getMeta,
   setMeta
@@ -17,7 +20,7 @@ import {
 import { buildBackup, importBackup } from '../src/lib/backup'
 import { computeStats, watchedEpisodesOf } from '../src/lib/stats'
 import { createPinRecord, verifyPin } from '../src/lib/crypto'
-import type { Collection, TitleItem } from '../src/types'
+import type { Collection, Person, TitleItem } from '../src/types'
 
 function makeTitle(id: string, patch: Partial<TitleItem> = {}): TitleItem {
   const now = new Date().toISOString()
@@ -43,6 +46,9 @@ function assert(cond: unknown, msg: string) {
 async function run() {
   // 清场，保证可重复运行
   for (const c of await listCollections()) await removeCollection(c.id)
+  for (const z of ['library', 'vault'] as const) {
+    for (const p of await listPeople(z)) await removePerson(z, p.id)
+  }
   await clearZone('library')
   await clearZone('vault')
 
@@ -141,7 +147,41 @@ async function run() {
   assert(stats.minutes > 0, `累计时长 > 0（${stats.minutes} 分钟）`)
   assert(stats.byStatus.done === 1, '状态分布正确')
 
-  console.log('9) 元数据键值')
+  console.log('9) 演员：两区隔离')
+  const now = new Date().toISOString()
+  const mk = (id: string, name: string, titleIds: string[]): Person => ({
+    id,
+    name,
+    titleIds,
+    source: 'manual',
+    createdAt: now,
+    updatedAt: now
+  })
+  await putPerson('library', mk('p-lib', '公开区演员', ['a1']))
+  await putPerson('vault', mk('p-vault', '隐私区演员', ['v1']))
+
+  const libPeople = await listPeople('library')
+  const vaultPeopleAfter = await listPeople('vault')
+  assert(libPeople.some((p) => p.name === '公开区演员'), '公开区演员写入成功')
+  assert(vaultPeopleAfter.some((p) => p.name === '隐私区演员'), '隐私区演员写入成功')
+  assert(
+    !libPeople.some((p) => p.name === '隐私区演员'),
+    '公开区演员表里不含隐私区演员'
+  )
+  assert(
+    !vaultPeopleAfter.some((p) => p.name === '公开区演员'),
+    '隐私区演员表里不含公开区演员'
+  )
+
+  console.log('10) 演员：清空片库不影响隐私区')
+  await clearZone('library')
+  assert((await listPeople('library')).length === 0, '公开区演员随片库清空')
+  assert(
+    (await listPeople('vault')).some((p) => p.name === '隐私区演员'),
+    '清空公开片库后隐私区演员仍在'
+  )
+
+  console.log('11) 元数据键值')
   const pin = await getMeta<{ hash?: string } | null>('vault', 'vault.pin', null)
   assert(Boolean(pin?.hash), 'PIN 记录持久化')
 

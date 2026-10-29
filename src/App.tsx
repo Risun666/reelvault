@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { HashRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { libraryStore, vaultStore } from './store/zone'
+import { libraryPeople, vaultPeople } from './store/people'
 import { shouldAutoLock, useVaultSession } from './store/vaultSession'
 import { useCollections } from './store/collections'
 import { initTheme } from './store/theme'
@@ -15,6 +16,7 @@ import AddItem from './pages/AddItem'
 import VaultGate from './pages/VaultGate'
 import Collections from './pages/Collections'
 import CollectionDetail from './pages/CollectionDetail'
+import ActorDetail from './pages/ActorDetail'
 
 const NAV_ROUTES = ['/', '/discover', '/collections', '/stats', '/settings']
 
@@ -25,6 +27,7 @@ export default function App() {
     void libraryStore.getState().refresh()
     void useVaultSession.getState().init()
     void useCollections.getState().refreshPublic()
+    void libraryPeople.getState().refresh()
   }, [])
 
   useEffect(() => {
@@ -33,6 +36,7 @@ export default function App() {
       if (s.active && shouldAutoLock(s.lastTouch)) {
         s.lock()
         vaultStore.getState().clearMemory()
+        vaultPeople.getState().clearMemory()
       }
     }, 15000)
     return () => window.clearInterval(timer)
@@ -46,6 +50,7 @@ export default function App() {
           <Route path="/discover" element={<Discover />} />
           <Route path="/collections" element={<Collections />} />
           <Route path="/collection/:id" element={<CollectionDetail />} />
+          <Route path="/person/:zone/:id" element={<ActorDetail />} />
           <Route path="/stats" element={<Stats />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/title/:zone/:id" element={<Detail />} />

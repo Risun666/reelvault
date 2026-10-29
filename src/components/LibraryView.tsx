@@ -9,7 +9,8 @@ import type { TitleItem, WatchStatus } from '../types'
 import { KIND_LABEL, STATUS_LABEL } from '../types'
 import Poster from '../components/Poster'
 import Icon from '../components/Icon'
-import { Button, Chip, EmptyState } from '../components/ui'
+import { Button, Chip, EmptyState, Segmented } from '../components/ui'
+import PeopleGrid from '../components/PeopleGrid'
 
 const STATUS_TABS: Array<{ value: WatchStatus | 'all'; label: string }> = [
   { value: 'all', label: '全部' },
@@ -49,6 +50,7 @@ export default function LibraryView({
   const [tag, setTag] = useState<string | null>(null)
   const [sort, setSort] = useState<SortKey>('updated')
   const [showFilter, setShowFilter] = useState(false)
+  const [tab, setTab] = useState<'titles' | 'people'>('titles')
 
   const tags = useMemo(() => {
     const set = new Set<string>()
@@ -109,6 +111,21 @@ export default function LibraryView({
         </Link>
       </header>
 
+      <div className="pb-3">
+        <Segmented
+          value={tab}
+          onChange={(v) => setTab(v as 'titles' | 'people')}
+          options={[
+            { value: 'titles', label: '影片' },
+            { value: 'people', label: '演员' }
+          ]}
+        />
+      </div>
+
+      {tab === 'people' ? (
+        <PeopleGrid zone={zone} />
+      ) : (
+        <>
       <div className="flex items-center gap-2 pb-3">
         <div className="relative flex-1">
           <Icon name="search" size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-faint" />
@@ -221,6 +238,8 @@ export default function LibraryView({
             <Row key={it.id} zone={zone} item={it} />
           ))}
         </div>
+      )}
+        </>
       )}
     </div>
   )

@@ -61,7 +61,7 @@ const tick = (ms = 220) => new Promise((r) => setTimeout(r, ms))
 
 async function main() {
   // 预置一部影片与一个片单，便于验证详情页
-  const { putTitle, putCollection } = await import('../src/lib/db')
+  const { putTitle, putCollection, putPerson } = await import('../src/lib/db')
   const titleId = 'smoke-title-1'
   const colId = 'smoke-col-1'
   await putTitle('library', {
@@ -84,6 +84,24 @@ async function main() {
     note: '把没看完的补齐',
     zone: 'library',
     itemIds: [titleId],
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  })
+  const personId = 'smoke-person-1'
+  await putPerson('library', {
+    id: personId,
+    name: '冒烟测试演员',
+    note: '用于验证演员详情页',
+    titleIds: [titleId],
+    source: 'manual',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  })
+  await putPerson('vault', {
+    id: 'smoke-person-vault',
+    name: '隐私区演员',
+    titleIds: [],
+    source: 'manual',
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString()
   })
@@ -140,13 +158,18 @@ async function main() {
   console.log('4) 路由切换 /settings')
   window.location.hash = '#/settings'
   await tick()
-  assert(body().includes('TMDB API Key'), '设置页渲染')
+  assert(body().includes('数据来源'), '设置页渲染')
+  assert(body().includes('接口节点'), '接口节点区块渲染')
   assert(body().includes('导出 JSON 备份'), '备份入口渲染')
   assert(body().includes('创建隐私空间'), '隐私空间引导渲染')
   assert(body().includes('检查更新'), '检查更新区块渲染')
   assert(body().includes('百度网盘'), '百度网盘下载渠道渲染')
   assert(body().includes('夸克网盘'), '夸克网盘下载渠道渲染')
   assert(body().includes('外观'), '外观设置区块渲染')
+  assert(body().includes('使用内置 API Key'), '内置 Key 开关渲染')
+  assert(body().includes('番号刮削'), '番号刮削区块渲染')
+  assert(body().includes('GitHub'), '页脚 GitHub 入口渲染')
+  assert(body().includes('by 赵大阳'), '作者信息渲染')
 
   await tick(800)
   assert(body().includes('v9.9.9'), '检查更新识别到新版本')
@@ -184,10 +207,28 @@ async function main() {
   useTheme.getState().set({ mode: 'light', accent: 'reel' })
   assert(document.documentElement.dataset.theme === 'light', '可切回浅色')
 
-  console.log('10) 手动添加页')
+  console.log('10) 演员详情页')
+  window.location.hash = `#/person/library/${personId}`
+  await tick(300)
+  assert(body().includes('冒烟测试演员'), '演员详情渲染姓名')
+  assert(body().includes('部作品'), '演员详情显示作品数')
+  assert(body().includes('冒烟测试影片'), '演员详情列出关联影片')
+  assert(!body().includes('隐私区演员'), '演员详情不含隐私区演员')
+
+  console.log('11) 片库演员栏目')
+  window.location.hash = '#/'
+  await tick(300)
+  assert(body().includes('演员'), '片库出现演员栏目入口')
+
+  console.log('12) 手动添加页 + 番号刮削')
+  const { useSettings } = await import('../src/store/settings')
+  useSettings.getState().set({ javEnabled: true, javEndpoint: 'https://example.com' })
   window.location.hash = '#/add/library'
-  await tick()
+  await tick(300)
   assert(body().includes('片名'), '手动录入表单渲染')
+  assert(body().includes('按番号自动填充'), '番号刮削入口渲染')
+  const codeInput = document.querySelector('input[placeholder^="如 SSNI"]')
+  assert(Boolean(codeInput), '番号输入框渲染')
 
   console.log('\n渲染冒烟通过 ✅  运行时错误：' + (errors.length ? JSON.stringify(errors, null, 2) : '无'))
   if (errors.length) process.exitCode = 1

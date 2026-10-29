@@ -8,12 +8,14 @@
  */
 
 /** 当前应用版本，改这里 + android/app/build.gradle 的 versionName */
-export const APP_VERSION = '1.1.0'
+export const APP_VERSION = '1.2.0'
 
 export const REPO_OWNER = 'Risun666'
 export const REPO_NAME = 'reelvault'
 
 export const RELEASES_URL = `https://github.com/${REPO_OWNER}/${REPO_NAME}/releases`
+/** 作者邮箱，设置页页脚跳转 */
+export const AUTHOR_MAIL = 'mailto:3073020053@qq.com'
 export const LATEST_RELEASE_URL = `https://github.com/${REPO_OWNER}/${REPO_NAME}/releases/latest`
 
 export interface DownloadSource {
