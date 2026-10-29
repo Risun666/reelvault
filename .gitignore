@@ -20,6 +20,8 @@ android/*.iml
 *.aab
 *.jks
 *.keystore
+# 允许把固定密钥放在 keystore/ 目录里提交（公开仓库慎用）
+!keystore/*.jks
 
 # TypeScript
 tsconfig.tsbuildinfo

@@ -133,11 +133,54 @@ npx cap open android      # 用 Android Studio 打开
 npx cap copy android      # 只拷贝前端产物
 ```
 
+### 签名与覆盖安装
+
+Android 只有同时满足下面三点，才允许直接覆盖安装（不用先卸载）：
+
+1. **包名一致** —— `applicationId` 恒为 `com.reelvault.app`
+2. **签名一致** —— 每次构建使用同一把密钥
+3. **版本号不降低** —— `versionCode` 递增（仓库里唯一来源是 `android/app/build.gradle`）
+
+云端构建时签名密钥的来源按优先级自动选择：
+
+| 优先级 | 来源 | 说明 |
+| --- | --- | --- |
+| 1 | 仓库 Secrets | 最稳，见下方配置步骤 |
+| 2 | 仓库内 `keystore/reelvault.jks` | 零配置，但公开仓库等于密钥公开 |
+| 3 | Actions 缓存 | 7 天不构建会被 GitHub 清理 |
+| 4 | 现场临时生成 | 每次签名都不同，**必须卸载旧版再装** |
+
+#### 固定签名（推荐）
+
+1. 生成一次密钥（本机已生成好的在 `releases/reelvault.jks`）：
+
+   ```bash
+   keytool -genkeypair -v -keystore reelvault.jks -storetype PKCS12 \
+     -keyalg RSA -keysize 2048 -validity 10950 -sigalg SHA256withRSA \
+     -alias reelvault -storepass reelvault -keypass reelvault \
+     -dname "CN=ReelVault, OU=ReelVault, O=ReelVault, L=Beijing, ST=Beijing, C=CN"
+   base64 -w0 reelvault.jks > reelvault.jks.b64
+   ```
+
+2. 到仓库 **Settings → Secrets and variables → Actions → New repository secret**，依次添加四个：
+
+   | Name | Value |
+   | --- | --- |
+   | `ANDROID_KEYSTORE_BASE64` | `reelvault.jks.b64` 的全部内容（单行） |
+   | `ANDROID_KEYSTORE_PASSWORD` | `reelvault` |
+   | `ANDROID_KEY_ALIAS` | `reelvault` |
+   | `ANDROID_KEY_PASSWORD` | `reelvault` |
+
+3. 之后每次构建都用同一把密钥，装新版本时直接点击安装即可覆盖，数据不会丢。
+
+密钥一旦丢失就无法再升级（只能卸载重装并丢失本地数据），务必备份好 `reelvault.jks`。
+构建日志的 Job Summary 会打印本次签名来源与 SHA256 指纹，可用于核对是否一致。
+
 ## 已知平台边界
 
 - **保险箱 PIN** 依赖 WebCrypto，必须在安全上下文（`https://` 或 `localhost`）下运行。Capacitor 默认以 `https://localhost` 提供服务，APK 内可正常使用。
 - **检查更新**会访问 `api.github.com`（连不上时自动试公开镜像）。若全部不通，界面仍会列出三个下载渠道，可直接手动前往。
-- Debug APK 使用自动生成的调试签名，手机上需允许「未知来源」安装。
+- 手机上需允许「未知来源」才能安装本 APK。配置了固定签名密钥后新旧版本可直接覆盖安装，详见上文「签名与覆盖安装」。
 
 ## 目录速览
 

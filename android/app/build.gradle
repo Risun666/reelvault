@@ -7,8 +7,11 @@ android {
         applicationId "com.reelvault.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 3
-        versionName "1.2.0"
+        // 版本号唯一来源在仓库里维护；CI 可用 VERSION_CODE / VERSION_NAME 覆盖
+        def envCode = System.getenv('VERSION_CODE')
+        def envName = System.getenv('VERSION_NAME')
+        versionCode(envCode && "$envCode".isInteger() ? "$envCode".toInteger() : 4)
+        versionName(envName ? envName : '1.2.1')
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -24,21 +27,30 @@ android {
                 // file() 在模块里相对 android/app 解析，再兜一层工程根目录
                 def f = file(storePath)
                 if (!f.exists()) f = rootProject.file(storePath)
-                storeFile f
-                storePassword System.getenv('RELEASE_STORE_PASSWORD')
-                keyAlias System.getenv('RELEASE_KEY_ALIAS')
-                keyPassword System.getenv('RELEASE_KEY_PASSWORD')
+                if (f.exists()) {
+                    storeFile f
+                    storePassword System.getenv('RELEASE_STORE_PASSWORD')
+                    keyAlias System.getenv('RELEASE_KEY_ALIAS')
+                    keyPassword System.getenv('RELEASE_KEY_PASSWORD')
+                }
             }
         }
     }
 
     buildTypes {
         release {
-            if (System.getenv('RELEASE_STORE_FILE')) {
+            // 有正式密钥就用，否则退化成未签名（本地构建）
+            if (signingConfigs.release.storeFile) {
                 signingConfig signingConfigs.release
             }
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+        }
+        debug {
+            // 与 release 共用同一密钥：跨版本、跨 debug/release 都能覆盖安装
+            if (signingConfigs.release.storeFile) {
+                signingConfig signingConfigs.release
+            }
         }
     }
 }

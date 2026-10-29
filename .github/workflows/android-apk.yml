@@ -47,37 +47,72 @@ jobs:
       - name: 同步到 Android 工程
         run: npx cap sync android
 
-      - name: 准备签名密钥（Release 用）
-        if: ${{ github.event.inputs.release == 'true' || startsWith(github.ref, 'refs/tags/v') }}
+      - name: 恢复签名密钥缓存
+        id: cache-keystore
+        uses: actions/cache/restore@v4
+        with:
+          path: android/app/reelvault.jks
+          key: reelvault-signing-keystore-v1
+
+      # 签名密钥优先级：仓库 Secrets > 仓库内 keystore/ 目录 > Actions 缓存 > 临时生成
+      # 只有前三级能保证跨次构建签名一致（可覆盖安装），临时密钥每次都不同（必须卸载旧版）
+      - name: 准备签名密钥
+        id: signing
         env:
           KS_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           KS_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           KS_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           KS_KEY_PASS: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
+          set -e
+          KS="android/app/reelvault.jks"
           if [ -n "$KS_B64" ] && [ -n "$KS_ALIAS" ]; then
-            echo "$KS_B64" | base64 -d > android/app/reelvault.jks
-            echo "RELEASE_STORE_PASSWORD=$KS_PASS" >> $GITHUB_ENV
-            echo "RELEASE_KEY_ALIAS=$KS_ALIAS" >> $GITHUB_ENV
-            echo "RELEASE_KEY_PASSWORD=$KS_KEY_PASS" >> $GITHUB_ENV
-            echo "RELEASE_STORE_FILE=reelvault.jks" >> $GITHUB_ENV
+            echo "$KS_B64" | base64 -d > "$KS"
+            PASS="$KS_PASS"
+            ALIAS="$KS_ALIAS"
+            KEYPASS="$KS_KEY_PASS"
+            echo "source=secret" >> $GITHUB_OUTPUT
             echo "使用仓库 Secrets 中配置的正式密钥签名"
+          elif [ -f "keystore/reelvault.jks" ]; then
+            cp "keystore/reelvault.jks" "$KS"
+            PASS="reelvault"
+            ALIAS="reelvault"
+            KEYPASS="reelvault"
+            echo "source=repo" >> $GITHUB_OUTPUT
+            echo "使用仓库内 keystore/reelvault.jks 签名（公开仓库意味着密钥公开，仅供个人自用）"
+          elif [ -f "$KS" ]; then
+            PASS="reelvault"
+            ALIAS="reelvault"
+            KEYPASS="reelvault"
+            echo "source=cache" >> $GITHUB_OUTPUT
+            echo "复用 Actions 缓存中的密钥"
           else
             keytool -genkeypair -v \
-              -keystore android/app/reelvault.jks \
-              -keyalg RSA -keysize 2048 -validity 10000 \
+              -keystore "$KS" \
+              -storetype PKCS12 \
+              -keyalg RSA -keysize 2048 -validity 10950 -sigalg SHA256withRSA \
               -alias reelvault \
               -storepass reelvault -keypass reelvault \
-              -dname "CN=ReelVault, OU=App, O=ReelVault, L=, S=, C=CN"
-            echo "RELEASE_STORE_PASSWORD=reelvault" >> $GITHUB_ENV
-            echo "RELEASE_KEY_ALIAS=reelvault" >> $GITHUB_ENV
-            echo "RELEASE_KEY_PASSWORD=reelvault" >> $GITHUB_ENV
-            echo "RELEASE_STORE_PASSWORD=reelvault" >> $GITHUB_ENV
-            echo "RELEASE_KEY_ALIAS=reelvault" >> $GITHUB_ENV
-            echo "RELEASE_KEY_PASSWORD=reelvault" >> $GITHUB_ENV
-            echo "RELEASE_STORE_FILE=reelvault.jks" >> $GITHUB_ENV
-            echo "::warning::未配置 ANDROID_KEYSTORE_BASE64 等 Secrets，本次使用临时密钥签名。跨次构建的 APK 签名不同，覆盖安装前需先卸载旧版。仓库 Settings → Secrets and variables → Actions 里配置后可固定签名。"
+              -dname "CN=ReelVault, OU=ReelVault, O=ReelVault, L=Beijing, ST=Beijing, C=CN"
+            PASS="reelvault"
+            ALIAS="reelvault"
+            KEYPASS="reelvault"
+            echo "source=generated" >> $GITHUB_OUTPUT
+            echo "::warning::未配置 ANDROID_KEYSTORE_BASE64 等 Secrets，本次现场生成密钥并写入缓存。缓存被清理后签名会变，覆盖安装前需先卸载旧版。"
           fi
+          echo "RELEASE_STORE_FILE=reelvault.jks" >> $GITHUB_ENV
+          echo "RELEASE_STORE_PASSWORD=$PASS" >> $GITHUB_ENV
+          echo "RELEASE_KEY_ALIAS=$ALIAS" >> $GITHUB_ENV
+          echo "RELEASE_KEY_PASSWORD=$KEYPASS" >> $GITHUB_ENV
+          FP=$(keytool -list -v -keystore "$KS" -storepass "$PASS" -alias "$ALIAS" | awk '/SHA256:/{print $2; exit}')
+          echo "fingerprint=$FP" >> $GITHUB_OUTPUT
+
+      - name: 保存签名密钥缓存
+        if: steps.signing.outputs.source == 'generated'
+        uses: actions/cache/save@v4
+        with:
+          path: android/app/reelvault.jks
+          key: reelvault-signing-keystore-v1
 
       - name: 赋权 gradlew
         run: chmod +x android/gradlew
@@ -119,6 +154,14 @@ jobs:
         run: |
           echo "### 影匣 APK 构建完成" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **签名来源**：\`${{ steps.signing.outputs.source }}\`，SHA256 指纹 \`${{ steps.signing.outputs.fingerprint }}\`" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ steps.signing.outputs.source }}" = "generated" ]; then
+            echo "- **⚠️ 覆盖安装**：本次密钥为临时生成，安装前需卸载旧版；配置 Secrets 后即可直接覆盖安装" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- **✅ 覆盖安装**：签名固定，直接安装即可覆盖旧版（版本号需递增）" >> $GITHUB_STEP_SUMMARY
+          fi
           echo "- **Debug**：本页 Artifacts 区 → \`reelvault-debug\` → 下载 \`app-debug.apk\`" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ github.event.inputs.release }}" = "true" ] || [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            echo "- **Release**：本页 Artifacts 区 → \`reelvault-release\` → 下载 \`app-release.apk\`" >> $GITHUB_STEP_SUMMARY
+          fi
           echo "- **安装**：手机上允许「未知来源」，用文件管理器点开 APK 即可" >> $GITHUB_STEP_SUMMARY
-          echo "- **注意**：Debug 使用调试签名，跨次构建的签名不同，覆盖安装前请先卸载旧版" >> $GITHUB_STEP_SUMMARY

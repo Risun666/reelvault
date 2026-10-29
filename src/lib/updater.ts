@@ -8,7 +8,7 @@
  */
 
 /** 当前应用版本，改这里 + android/app/build.gradle 的 versionName */
-export const APP_VERSION = '1.2.0'
+export const APP_VERSION = '1.2.1'
 
 export const REPO_OWNER = 'Risun666'
 export const REPO_NAME = 'reelvault'
