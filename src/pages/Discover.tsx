@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { TmdbError, fetchChart, searchTitles, type TmdbSearchHit } from '../lib/tmdb'
+import { TmdbError, fetchChart, hasApiKey, searchTitles, type TmdbSearchHit } from '../lib/tmdb'
 import { fetchTitleCandidate } from '../lib/addTitle'
 import { useSettings } from '../store/settings'
 import { useLibraryStore, useVaultStore, zoneStore } from '../store/zone'
@@ -57,7 +57,7 @@ export default function Discover() {
         setSearchError(null)
         return
       }
-      if (!settings.apiKey) {
+      if (!hasApiKey(settings)) {
         setSearchError('尚未配置 TMDB API Key')
         return
       }
@@ -85,7 +85,7 @@ export default function Discover() {
 
   useEffect(() => {
     if (tab !== 'trending') return
-    if (!settings.apiKey) {
+    if (!hasApiKey(settings)) {
       setChartError('尚未配置 TMDB API Key')
       return
     }
@@ -99,7 +99,7 @@ export default function Discover() {
 
   useEffect(() => {
     if (tab !== 'ranking') return
-    if (!settings.apiKey) return
+    if (!hasApiKey(settings)) return
     setTopLoading(true)
     void Promise.all([fetchChart(settings, 'movie', 'top'), fetchChart(settings, 'tv', 'top')])
       .then(([movie, tv]) => {
@@ -160,7 +160,7 @@ export default function Discover() {
         />
       </div>
 
-      {!settings.apiKey && (
+      {!hasApiKey(settings) && (
         <div className="mb-3 rounded-2xl border border-reel/25 bg-reel-soft p-3 text-[0.8125rem] leading-relaxed text-reel-dark">
           还没有填写 TMDB API Key。填一次就能自动拉封面、简介、演员表，也能看热门和榜单；也可以完全手动录入。
           <div className="mt-2 flex gap-2">
@@ -353,7 +353,7 @@ export default function Discover() {
             <YearDigest items={lib} />
           </div>
 
-          {settings.apiKey ? (
+          {hasApiKey(settings) ? (
             <>
               <h2 className="mb-2 mt-6 text-[0.75rem] font-medium uppercase tracking-wide text-ink-faint">
                 TMDB 高分电影榜

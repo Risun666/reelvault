@@ -19,9 +19,20 @@ export interface SettingsShape {
 
   /** 番号刮削（隐私区用） */
   javEnabled: boolean
+  /** proxy = 本项目自带服务；metatube = MetaTube（20+ provider） */
+  javBackend: 'proxy' | 'metatube'
   javEndpoint: string
-  javSource: 'auto' | 'javdb' | 'dmm'
   javToken: string
+  /** proxy 后端启用哪些数据源（按优先级） */
+  javSources: string[]
+  /** metatube 后端指定 provider，留空由它自己挑 */
+  javProvider: string
+  /** 补简介（会多问几家站，需要对方节点能出网） */
+  javEnrich: boolean
+  /** 标题用中文翻译名还是日文原名 */
+  javTitleLang: 'translated' | 'original'
+  /** 封面经代理下载后存本地 */
+  javImageProxy: boolean
 }
 
 const KEY = 'rv.settings.v1'
@@ -38,9 +49,14 @@ const DEFAULTS: SettingsShape = {
   useBuiltInKey: true,
 
   javEnabled: false,
+  javBackend: 'proxy',
   javEndpoint: '',
-  javSource: 'auto',
-  javToken: ''
+  javToken: '',
+  javSources: ['javdb', 'jav321', 'dmm', 'avsox', 'mgstage', 'fc2'],
+  javProvider: '',
+  javEnrich: false,
+  javTitleLang: 'translated',
+  javImageProxy: true
 }
 
 function load(): SettingsShape {

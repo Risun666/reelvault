@@ -4,7 +4,9 @@ import { libraryStore, vaultStore } from './store/zone'
 import { libraryPeople, vaultPeople } from './store/people'
 import { shouldAutoLock, useVaultSession } from './store/vaultSession'
 import { useCollections } from './store/collections'
+import { useSettings } from './store/settings'
 import { initTheme } from './store/theme'
+import { autoTune } from './lib/tmdb'
 import ToastHost from './components/Toast'
 import BottomNav from './components/BottomNav'
 import Home from './pages/Home'
@@ -19,6 +21,7 @@ import CollectionDetail from './pages/CollectionDetail'
 import ActorDetail from './pages/ActorDetail'
 
 const NAV_ROUTES = ['/', '/discover', '/collections', '/stats', '/settings']
+const TUNE_KEY = 'rv.tmdbTunedAt'
 
 initTheme()
 
@@ -28,6 +31,26 @@ export default function App() {
     void useVaultSession.getState().init()
     void useCollections.getState().refreshPublic()
     void libraryPeople.getState().refresh()
+  }, [])
+
+  // 启动时挑一次最快的接口节点与可用的图片域名（最多每天一次）
+  useEffect(() => {
+    void (async () => {
+      const s = useSettings.getState()
+      if (s.autoEndpoint === false) return
+      const stamp = Number(localStorage.getItem(TUNE_KEY) ?? 0)
+      if (Date.now() - stamp < 24 * 3600 * 1000) return
+      try {
+        const best = await autoTune(s)
+        localStorage.setItem(TUNE_KEY, String(Date.now()))
+        const patch: Partial<Record<'apiBase' | 'imageBase', string>> = {}
+        if (best.api && best.api !== s.apiBase) patch.apiBase = best.api
+        if (best.image && best.image !== s.imageBase) patch.imageBase = best.image
+        if (Object.keys(patch).length) useSettings.getState().set(patch)
+      } catch {
+        /* 网络不通就算了，不打扰用户 */
+      }
+    })()
   }, [])
 
   useEffect(() => {

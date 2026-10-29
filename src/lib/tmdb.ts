@@ -21,6 +21,19 @@ export function isUsingBuiltInKey(settings: TmdbSettings): boolean {
   return resolveApiKey(settings) === BUILT_IN_API_KEY
 }
 
+/**
+ * 当前是否有一个能用的 Key。
+ * 页面判断「能不能用 TMDB」必须走这里，而不是去看用户手填的那个字段
+ * —— 内置 Key 生效时用户字段是空的，直接判空会把内置 Key 也一起判死。
+ */
+export function hasApiKey(settings: TmdbSettings): boolean {
+  return Boolean(resolveApiKey(settings))
+}
+
+/** Key 出问题时的提示文案，内置 Key 是共享的，提示里要说清楚怎么换 */
+const KEY_INVALID_MSG = 'API Key 无效。内置 Key 是共享的，可能已被吊销：关掉「使用内置 API Key」换成自己的'
+const KEY_LIMITED_MSG = '请求过于频繁（内置 Key 与别人共用，额度容易被打满）。稍后再试，或换成自己的 Key'
+
 export interface TmdbSettings {
   apiKey: string
   /** 使用内置 Key；false 时用 apiKey 字段 */
@@ -105,8 +118,8 @@ async function fetchJson<T>(url: string, timeoutMs = 12_000): Promise<T> {
   const timer = setTimeout(() => ctrl.abort(), timeoutMs)
   try {
     const res = await fetch(url, { signal: ctrl.signal })
-    if (res.status === 401) throw new TmdbError('API Key 无效，请在设置中检查')
-    if (res.status === 429) throw new TmdbError('请求过于频繁，请稍后再试')
+    if (res.status === 401) throw new TmdbError(KEY_INVALID_MSG)
+    if (res.status === 429) throw new TmdbError(KEY_LIMITED_MSG)
     if (!res.ok) throw new TmdbError(`TMDB 请求失败（${res.status}）`)
     return (await res.json()) as T
   } finally {
@@ -203,7 +216,8 @@ export async function probeEndpoint(base: string, key: string): Promise<Omit<Pro
   try {
     const res = await fetch(url, { signal: ctrl.signal })
     const ms = Date.now() - started
-    if (res.status === 401) return { base, ok: true, ms, note: '可达，但 Key 无效' }
+    if (res.status === 401) return { base, ok: true, ms, note: 'Key 无效' }
+    if (res.status === 429) return { base, ok: true, ms, note: 'Key 已被限流' }
     if (!res.ok) return { base, ok: false, ms, note: `HTTP ${res.status}` }
     return { base, ok: true, ms }
   } catch (err) {
@@ -240,6 +254,137 @@ export async function pickFastest(settings: TmdbSettings): Promise<ProbeResult |
   return all.find((r) => r.ok) ?? null
 }
 
+/* --------------------------- 一键诊断 --------------------------- */
+
+export interface KeyCheck {
+  ok: boolean
+  status: number | null
+  note: string
+}
+
+/**
+ * 验证 Key 本身：逐个节点问过去，只要有一个节点给出明确答复就有结论。
+ * 网络全断时不会误判成「Key 无效」。
+ */
+export async function checkKey(settings: TmdbSettings): Promise<KeyCheck> {
+  const key = resolveApiKey(settings)
+  if (!key) return { ok: false, status: null, note: '还没有可用的 API Key' }
+
+  for (const base of orderedBases(settings)) {
+    const r = await probeEndpoint(base, key)
+    if (r.note === 'Key 无效') {
+      return {
+        ok: false,
+        status: 401,
+        note: isUsingBuiltInKey(settings)
+          ? '内置 Key 已失效，请关掉「使用内置 API Key」换成自己的'
+          : '这个 Key 无效，检查有没有复制全'
+      }
+    }
+    if (r.note === 'Key 已被限流') {
+      return {
+        ok: false,
+        status: 429,
+        note: '内置 Key 与别人共用，额度容易被打满。稍后再试，或换成自己的 Key'
+      }
+    }
+    if (r.ok) return { ok: true, status: 200, note: `Key 有效（${r.ms}ms · ${base}）` }
+  }
+  return { ok: false, status: null, note: '所有节点都连不上，无法验证 Key —— 多半是网络问题' }
+}
+
+/** 图片 CDN 可达性：拿一张确定存在的海报去试 */
+const IMAGE_PROBE_PATH = '/w500/8ZTVqvKDQ8emSGUEMjsS4yHAwrp.jpg'
+
+export interface ImageProbe {
+  base: string
+  ok: boolean
+  ms: number | null
+}
+
+export async function checkImage(base: string): Promise<ImageProbe> {
+  const url = `${base.replace(/\/+$/, '')}${IMAGE_PROBE_PATH}`
+  const started = Date.now()
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), 8000)
+  try {
+    const res = await fetch(url, { signal: ctrl.signal })
+    return { base, ok: res.ok, ms: Date.now() - started }
+  } catch {
+    return { base, ok: false, ms: null }
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+export interface Diagnosis {
+  key: KeyCheck
+  api: ProbeResult[]
+  images: ImageProbe[]
+  usingBuiltIn: boolean
+}
+
+export function pickImageBase(images: ImageProbe[]): string | null {
+  const usable = images.filter((i) => i.ok).sort((a, b) => (a.ms ?? 9e9) - (b.ms ?? 9e9))
+  return usable[0]?.base ?? null
+}
+
+/** 一次性把「Key 状态 + API 节点 + 图片 CDN」都查清楚 */
+export async function diagnose(settings: TmdbSettings): Promise<Diagnosis> {
+  const candidates = Array.from(
+    new Set(
+      [settings.imageBase, DEFAULT_IMAGE_BASE, ...IMAGE_HOSTS.map((h) => `https://${h}/t/p`)].filter(
+        Boolean
+      ) as string[]
+    )
+  )
+  const [key, api, images] = await Promise.all([
+    checkKey(settings),
+    probeAll(settings).catch(() => [] as ProbeResult[]),
+    Promise.all(candidates.map((b) => checkImage(b)))
+  ])
+  return { key, api, images, usingBuiltIn: isUsingBuiltInKey(settings) }
+}
+
+/**
+ * 自动挑选最快的 API 节点与可用的图片 CDN。
+ * 返回值给调用方写回设置，避免在 lib 里直接依赖 store。
+ */
+export async function autoTune(settings: TmdbSettings): Promise<{ api?: string; image?: string }> {
+  const d = await diagnose(settings)
+  const api = d.api.find((p) => p.ok && !p.note)
+  const image = pickImageBase(d.images)
+  return { ...(api ? { api: api.base } : {}), ...(image ? { image } : {}) }
+}
+
+/* --------------------------- 结果缓存 --------------------------- */
+
+/**
+ * 内置 Key 是跟大家共用的，额度有限：同样的请求 5 分钟内直接走缓存，
+ * 既省额度也让页面来回切换时更快。
+ */
+const CACHE_TTL = 5 * 60 * 1000
+const CACHE_MAX = 120
+const resultCache = new Map<string, { at: number; data: unknown }>()
+
+async function cached<T>(key: string, producer: () => Promise<T>): Promise<T> {
+  const hit = resultCache.get(key)
+  if (hit && Date.now() - hit.at < CACHE_TTL) return hit.data as T
+  const data = await producer()
+  if (resultCache.size >= CACHE_MAX) {
+    const oldest = resultCache.keys().next().value
+    if (oldest) resultCache.delete(oldest)
+  }
+  resultCache.set(key, { at: Date.now(), data })
+  return data
+}
+
+/** 换了 Key 或节点后清空缓存 */
+export function clearResultCache(): void {
+  resultCache.clear()
+  workingBase = null
+}
+
 /* --------------------------- 业务接口 --------------------------- */
 
 export async function searchTitles(
@@ -252,18 +397,23 @@ export async function searchTitles(
   const endpoint = kind === 'tv' ? 'tv' : 'movie'
   const q = encodeURIComponent(query.trim())
   const adult = settings.includeAdult === false ? 'false' : 'true'
-  const data = await requestPath<{ results: Array<Record<string, unknown>> }>(
-    settings,
-    `/search/${endpoint}?api_key=${key}&language=${lang}&query=${q}&include_adult=${adult}`
+  const cacheKey = `search|${key}|${kind}|${adult}|${q}`
+  const data = await cached(cacheKey, () =>
+    requestPath<{ results: Array<Record<string, unknown>> }>(
+      settings,
+      `/search/${endpoint}?api_key=${key}&language=${lang}&query=${q}&include_adult=${adult}`
+    )
   )
 
   let hits = (data.results ?? []).map((r) => normalize(r, kind === 'tv' ? 'tv' : 'movie', imageBase))
 
   if (kind === 'all') {
     try {
-      const tv = await requestPath<{ results: Array<Record<string, unknown>> }>(
-        settings,
-        `/search/tv?api_key=${key}&language=${lang}&query=${q}&include_adult=${adult}`
+      const tv = await cached(`${cacheKey}|tv`, () =>
+        requestPath<{ results: Array<Record<string, unknown>> }>(
+          settings,
+          `/search/tv?api_key=${key}&language=${lang}&query=${q}&include_adult=${adult}`
+        )
       )
       hits = hits.concat((tv.results ?? []).map((r) => normalize(r, 'tv', imageBase)))
     } catch {
@@ -299,9 +449,11 @@ export async function fetchChart(
 ): Promise<TmdbSearchHit[]> {
   const { imageBase, key } = get(settings)
   const path = mode === 'trending' ? `trending/${kind}/week` : `${kind}/top_rated`
-  const data = await requestPath<{ results: Array<Record<string, unknown>> }>(
-    settings,
-    `/${path}?api_key=${key}&language=zh-CN&page=1`
+  const data = await cached(`chart|${key}|${path}`, () =>
+    requestPath<{ results: Array<Record<string, unknown>> }>(
+      settings,
+      `/${path}?api_key=${key}&language=zh-CN&page=1`
+    )
   )
   return (data.results ?? []).slice(0, 20).map((r) => normalize(r, kind, imageBase))
 }
@@ -317,9 +469,11 @@ export async function fetchDetail(
   backdrop: string | null
 }> {
   const { imageBase, key } = get(settings)
-  const data = await requestPath<Record<string, any>>(
-    settings,
-    `/${kind === 'tv' ? 'tv' : 'movie'}/${tmdbId}?api_key=${key}&language=zh-CN&append_to_response=credits`
+  const data = await cached(`detail|${key}|${kind}|${tmdbId}`, () =>
+    requestPath<Record<string, any>>(
+      settings,
+      `/${kind === 'tv' ? 'tv' : 'movie'}/${tmdbId}?api_key=${key}&language=zh-CN&append_to_response=credits`
+    )
   )
 
   const credits = (data.credits ?? {}) as Record<string, any>

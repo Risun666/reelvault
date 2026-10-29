@@ -7,3 +7,11 @@ compatibility_date = "2024-09-01"
 #
 # 可选：设置访问令牌
 #   npx wrangler secret put JAV_TOKEN --config wrangler-jav.toml
+#
+# 可选：改接 MetaTube（自带 20+ provider）
+#   [vars]
+#   METATUBE_URL = "http://127.0.0.1:8080"
+#   npx wrangler secret put METATUBE_TOKEN --config wrangler-jav.toml
+#
+# 说明：Cloudflare Worker 对部分站点有访问限制（比如成人站、会被 CF 判定为滥用的目标），
+#       这类请求可能直接失败。真要稳定用，建议自建 Node 代理（workers/jav-proxy.mjs）。

@@ -159,7 +159,7 @@ async function main() {
   window.location.hash = '#/settings'
   await tick()
   assert(body().includes('数据来源'), '设置页渲染')
-  assert(body().includes('接口节点'), '接口节点区块渲染')
+  assert(body().includes('连接诊断'), '连接诊断区块渲染')
   assert(body().includes('导出 JSON 备份'), '备份入口渲染')
   assert(body().includes('创建隐私空间'), '隐私空间引导渲染')
   assert(body().includes('检查更新'), '检查更新区块渲染')
@@ -222,13 +222,35 @@ async function main() {
 
   console.log('12) 手动添加页 + 番号刮削')
   const { useSettings } = await import('../src/store/settings')
-  useSettings.getState().set({ javEnabled: true, javEndpoint: 'https://example.com' })
+  useSettings.getState().set({
+    javEnabled: true,
+    javBackend: 'proxy',
+    javEndpoint: 'https://example.com',
+    javSources: ['javdb', 'jav321']
+  })
   window.location.hash = '#/add/library'
   await tick(300)
   assert(body().includes('片名'), '手动录入表单渲染')
   assert(body().includes('按番号自动填充'), '番号刮削入口渲染')
   const codeInput = document.querySelector('input[placeholder^="如 SSNI"]')
   assert(Boolean(codeInput), '番号输入框渲染')
+
+  console.log('13) 内置 Key 生效（发现页不该提示未配置）')
+  useSettings.getState().set({ useBuiltInKey: true, apiKey: '' })
+  window.location.hash = '#/discover'
+  await tick(300)
+  assert(!body().includes('还没有填写 TMDB API Key'), '内置 Key 生效时不再提示未配置')
+  assert(!body().includes('尚未配置 TMDB API Key'), '热门/榜单不因内置 Key 被判死')
+
+  console.log('14) 设置页刮削配置')
+  window.location.hash = '#/settings'
+  await tick(300)
+  assert(body().includes('内置代理'), '刮削后端选项渲染')
+  assert(body().includes('MetaTube'), 'MetaTube 后端选项渲染')
+  assert(body().includes('数据源（按优先级，至少留一个）'), '数据源多选渲染')
+  assert(body().includes('Jav321'), '数据源列表含 Jav321')
+  assert(body().includes('诊断并择优'), '连接诊断入口渲染')
+  useSettings.getState().set({ javEnabled: false })
 
   console.log('\n渲染冒烟通过 ✅  运行时错误：' + (errors.length ? JSON.stringify(errors, null, 2) : '无'))
   if (errors.length) process.exitCode = 1

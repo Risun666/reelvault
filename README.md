@@ -45,21 +45,63 @@
 
 ## 番号刮削（可选）
 
-隐私空间里添加影片时，可以只输番号自动带出标题、封面、演员、片商、发行日。
+隐私空间里添加影片时，只输番号就能带出标题、封面、演员、片商、系列、发行日、时长、评分。
+思路参考 AVDC 与 OpenAver：**多数据源逐个尝试 + 只填空字段**，谁先有谁填。
 
-浏览器有跨域限制，抓不了数据源站点，所以抓取跑在**你自己部署的代理**里：
+浏览器有跨域限制，抓不了数据源站点，所以抓取跑在**你自己部署的服务**里：
 
 ```bash
-node workers/jav-proxy.mjs          # 默认 8787 端口，零依赖
-curl "http://localhost:8787/?code=SSNI-589"
+node workers/jav-proxy.mjs                     # 零依赖，默认 8787 端口
+curl "http://localhost:8787/scrape?code=SSNI-589"
+curl "http://localhost:8787/health"
+
+node scripts/jav-smoke.mjs SSNI-589            # 不经服务，直接自检链路
 ```
 
 Cloudflare Workers 版见 `workers/jav-worker.js` + `wrangler-jav.toml`（请绑自定义域名）。
 
-- 接口：`GET /?code=<番号>[&src=auto|javdb|dmm]`，返回 JSON 元数据
-- 数据源：`javdb`（通用）、`dmm`（含剧情简介，需代理部署在日本/海外）
-- 可选设 `JAV_TOKEN` 环境变量做访问控制
-- **只取元数据**（番號/标题/封面/演员/片商等），不含任何下载或播放链接
+### 内置代理后端
+
+| 数据源 | 说明 | 部署节点要求 |
+| --- | --- | --- |
+| `javdb` | 数据最全：标题（含中译）、封面、演员、片商、系列、导演、类别、时长、评分 | 境内可直连 |
+| `jav321` | 封面走 DMM 图床 | 境内可直连 |
+| `dmm` | **唯一有日文简介**的一家 | 日本 / 海外 |
+| `avsox` | 备用 | 海外 |
+| `mgstage` | 素人番号命中率高 | 海外 |
+| `fc2` | FC2 番号专用 | 海外 |
+
+- 默认链路 `javdb → jav321 → dmm → avsox → mgstage → fc2`，拿到 JavDB 就收工（省对方站点资源）
+- 想要简介就在设置里开「补全简介」，会再问 DMM 等站补齐
+- 番号写法随便输：`SSNI-589` / `ssni589` / `ssni00589` / `FC2-PPV-1234567` / `259LUXU-1111`，
+  直接粘贴文件名也行（`[abc] SSNI-589 三上悠亜.mp4` 会自动抠出番号）
+
+### MetaTube 后端
+
+想覆盖无码 / 小众片商，可以把后端换成 [MetaTube](https://github.com/metatube-community/metatube-sdk-go)
+（自带 20+ 家 provider）：
+
+```bash
+docker run -d -p 8080:8080 metatube/metatube     # 具体镜像名以它的文档为准
+METATUBE_URL=http://127.0.0.1:8080 node workers/jav-proxy.mjs
+```
+
+设置里后端选「MetaTube」并填地址即可，App 会自动走它的
+`/v1/movies/search` + `/v1/movies/{provider}/{id}` + `/v1/images/primary/{provider}/{id}`。
+
+### 接口
+
+```
+GET /scrape?code=SSNI-589&src=javdb,jav321&enrich=1   → 统一格式的元数据
+GET /image?url=<图床直链>                              → 图片字节（带 CORS，供 App 存本地）
+GET /sources                                          → 数据源清单
+GET /providers                                        → MetaTube 后端的 provider 列表
+GET /health
+```
+
+- 可选设 `JAV_TOKEN` / `METATUBE_TOKEN` 做访问控制
+- 图床链接默认经 `/image` 代理下载后存本地，离线可看
+- **只取元数据**，不含任何下载或播放链接
 - ⚠️ 启用后你输入的番号会发往所填地址，请只填自己的服务
 
 ## 本地开发
@@ -78,8 +120,16 @@ npm run typecheck
 1. **默认用官方短域名** `https://api.tmdb.org/3`（`themoviedb.org` 这组域名在大陆被干扰得多得多）
 2. **自动降级**：一个节点 1.8 秒没响应就并行打下一个，Key 无效/限流这类错误不重试
 3. **海报域名兜底**：`image.tmdb.org` 加载失败会自动换 `image.themoviedb.org` 再试一次
+4. **启动时自动择优**：每天第一次打开会并发测一遍接口节点与图片 CDN，自动切到最快的那个
 
-还是不行的话，去「设置 → 数据来源」点 **测速并择优**，App 会并发测所有候选节点并显示延迟，自动切到最快那个。
+还是不行的话，去「设置 → 数据来源」点 **诊断并择优**，页面上会分别告诉你：
+API Key 是有效 / 已被限流 / 已失效、接口节点通不通、图片 CDN 通不通。
+
+### API Key
+
+- 默认使用**内置 Key**，开箱即用；它是共享的，被别人用多了会限流，也随时可能被吊销
+- 想稳定就自己在 themoviedb.org 申请一个（免费），在设置里关掉「使用内置 API Key」后填入
+- 无论用哪个 Key，请求结果都会缓存 5 分钟，既是省额度也是让页面切换更快
 
 ### 自建反代（候选节点全不可达时）
 

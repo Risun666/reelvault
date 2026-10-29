@@ -1,260 +1,612 @@
+#!/usr/bin/env node
 /**
- * 番号刮削核心逻辑（零依赖，Node 18+ / Cloudflare Workers 通用）
+ * 番号刮削内核（零依赖，Node 18+ / Cloudflare Workers 通用）
  *
- * 只抓取元数据：番號 / 标题 / 封面 / 发行日 / 片長 / 導演 / 片商 / 發行 / 系列 / 類別 / 演員。
- * 不含任何下载链接、磁力、播放地址。
+ * 思路参考 AVDC（jav321/javbus/javdb/avsox/dmm/mgstage/fc2 多站刮削）与
+ * OpenAver（多家互相补位、只填空字段）：
  *
- * 站点随时可能改版，解析规则放在这里，改了重部署即可，不用重新打包 App。
+ *  1. 番号规范化：SSNI-589 / ssni00589 / SSNI589 / FC2-PPV-1234567 / 素人 259LUXU-1111
+ *  2. 多数据源按链路抓取，各自解析，字段互相补位
+ *  3. 只取元数据，不含任何播放/下载链接
+ *
+ * 各站在境内/境外可达性不同，结果里会带上每个源的状态，方便排查。
  */
 
 const UA =
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36'
 
-/** 归一化番号用于比对：SSNI-589 / ssni589 / SSNI 589 → SSNI589 */
-export function normalizeCode(input) {
-  return String(input || '')
-    .toUpperCase()
-    .replace(/[^A-Z0-9]/g, '')
-}
+export const SOURCES = [
+  { id: 'javdb', label: 'JavDB', cn: true, note: '数据最全、封面清晰，国内多可直连' },
+  { id: 'jav321', label: 'Jav321', cn: true, note: '国内可直连，封面走 DMM 图床' },
+  { id: 'dmm', label: 'DMM / FANZA', cn: false, note: '有日文简介，通常需要日本/海外节点' },
+  { id: 'avsox', label: 'AVSOX', cn: false, note: '境外节点' },
+  { id: 'mgstage', label: 'MGS（素人）', cn: false, note: '境外节点，素人番号命中率高' },
+  { id: 'fc2', label: 'FC2', cn: false, note: '境外节点，FC2 番号专用' }
+]
 
-async function get(url, fetchImpl, timeoutMs = 15000) {
+export const DEFAULT_CHAIN = ['javdb', 'jav321', 'dmm', 'avsox', 'mgstage', 'fc2']
+
+/* ------------------------------ HTTP ------------------------------ */
+
+export async function httpGet(
+  url,
+  {
+    cookie = '',
+    timeout = 12_000,
+    accept = 'text/html,application/xhtml+xml,application/xml;q=0.9',
+    lang = 'zh-CN,zh;q=0.9'
+  } = {}
+) {
   const ctrl = new AbortController()
-  const timer = setTimeout(() => ctrl.abort(), timeoutMs)
+  const timer = setTimeout(() => ctrl.abort(), timeout)
   try {
-    const res = await fetchImpl(url, {
+    const res = await fetch(url, {
       signal: ctrl.signal,
-      headers: { 'User-Agent': UA, 'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8' }
+      redirect: 'follow',
+      headers: {
+        'User-Agent': UA,
+        Accept: accept,
+        'Accept-Language': lang,
+        ...(cookie ? { Cookie: cookie } : {})
+      }
     })
-    if (!res.ok) throw new Error(`HTTP ${res.status}`)
-    return await res.text()
+    return { ok: res.ok, status: res.status, text: await res.text(), url: res.url || url }
   } finally {
     clearTimeout(timer)
   }
 }
 
-function stripTags(html) {
-  return html
-    .replace(/<script[\s\S]*?<\/script>/gi, '')
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&amp;/g, '&')
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
+/* --------------------------- HTML 小工具 --------------------------- */
+
+const ENTITIES = {
+  '&amp;': '&',
+  '&lt;': '<',
+  '&gt;': '>',
+  '&quot;': '"',
+  '&nbsp;': ' ',
+  '&hellip;': '…',
+  '&#39;': "'",
+  '&#x27;': "'"
+}
+
+function decodeEntities(s) {
+  return String(s).replace(/&(?:amp|lt|gt|quot|nbsp|hellip|#39|#x27);/g, (m) => ENTITIES[m] ?? m)
+}
+
+function stripTags(s) {
+  return decodeEntities(String(s).replace(/<[^>]*>/g, ' '))
     .replace(/\s+/g, ' ')
     .trim()
 }
 
-/** 取 info 面板里某个字段（番號 / 日期 / 片商 …） */
-function panelValue(html, label) {
-  const re = new RegExp(`<strong>${label}:?</strong>[\\s\\S]{0,1200}?<span class="value">([\\s\\S]*?)</span>`, 'i')
+function one(html, re) {
   const m = html.match(re)
-  if (!m) return ''
-  return stripTags(m[1])
+  return m ? stripTags(m[1]) : ''
 }
 
-function panelLinks(html, label) {
-  const raw = panelValue(html, label)
-  return raw
-    .split(/[,，]/)
-    .map((s) => s.trim())
-    .filter(Boolean)
+function all(html, re) {
+  const out = []
+  const r = new RegExp(re.source, re.flags.includes('g') ? re.flags : `${re.flags}g`)
+  let m
+  while ((m = r.exec(html))) out.push(stripTags(m[1]))
+  return out
 }
 
-/* ------------------------------- javdb ------------------------------- */
+function uniq(list) {
+  const seen = new Set()
+  const out = []
+  for (const v of list) {
+    const k = String(v).trim()
+    if (!k || seen.has(k)) continue
+    seen.add(k)
+    out.push(k)
+  }
+  return out
+}
 
-const JAVDB = 'https://javdb.com'
+/* --------------------------- 番号规范化 --------------------------- */
 
-async function javdbSearch(code, fetchImpl) {
-  const html = await get(`${JAVDB}/search?q=${encodeURIComponent(code)}&f=all`, fetchImpl)
-  const target = normalizeCode(code)
-  const items = html.split('<div class="item">').slice(1)
-  for (const raw of items) {
-    const href = raw.match(/<a href="(\/v\/[^"]+)"/)
-    const strong = raw.match(/<div class="video-title">\s*<strong>([\s\S]*?)<\/strong>[\s\S]*?<\/div>/)
-    const title = raw.match(/<div class="video-title">([\s\S]*?)<\/div>/)
-    const cover = raw.match(/<img[^>]+src="([^"]+)"/)
-    const meta = raw.match(/<div class="meta">\s*([\s\S]*?)\s*<\/div>/)
-    if (!href) continue
-    const cardCode = strong ? normalizeCode(stripTags(strong[1])) : ''
-    if (target && cardCode && cardCode !== target) continue
+/**
+ * 把各种写法统一成 { code, sku, kind }
+ *  code —— 展示用番号，如 SSNI-589
+ *  sku  —— DMM 品番，如 ssni00589（jav321 / dmm / avsox 直接用）
+ *  kind —— standard | fc2 | amateur | heyzo | unknown
+ */
+export function normalizeCode(raw) {
+  const rawText = String(raw ?? '').trim()
+  if (!rawText) return { code: '', sku: '', kind: 'unknown' }
+
+  const s = rawText
+    .toUpperCase()
+    .replace(/\s+/g, '')
+    .replace(/\.(MP4|MKV|AVI|RMVB|WMV|MOV|FLV|WEBM|ISO)$/i, '')
+    .replace(/[-_]+$/, '')
+
+  let m
+
+  // FC2-PPV-1234567 / FC2-1234567 / fc21234567
+  if ((m = s.match(/^FC2[-_]?(?:PPV[-_]?)?(\d{6,7})$/))) {
+    return { code: `FC2-${m[1]}`, sku: `fc2-ppv-${m[1]}`, kind: 'fc2' }
+  }
+
+  // 素人：259LUXU-1111 / 259LUXU1111
+  if ((m = s.match(/^(\d{2,3})([A-Z]{3,6})[-_]?(\d{3,5})$/))) {
+    const letters = `${m[1]}${m[2]}`
     return {
-      path: href[1],
-      code: strong ? stripTags(strong[1]) : code,
-      title: title ? stripTags(title[1]).replace(/^\S+\s*/, '').trim() : '',
-      cover: cover ? cover[1] : '',
-      date: meta ? stripTags(meta[1]) : ''
+      code: `${letters}-${m[3]}`,
+      sku: `${letters.toLowerCase()}${m[3].padStart(5, '0')}`,
+      kind: 'amateur'
     }
   }
-  return null
+
+  // 标准：SSNI-589 / SSNI589 / SSNI00589 / HEYZO-1234
+  if ((m = s.match(/^([A-Z]{2,8})[-_]?(\d{2,7})$/))) {
+    const letters = m[1]
+    const digits = m[2]
+    // DMM 品番数字固定 5 位：SSNI00589 → SSNI-589
+    const short = digits.replace(/^0+/, '')
+    return {
+      code: `${letters}-${short || digits}`,
+      sku: `${letters.toLowerCase()}${digits.padStart(5, '0')}`,
+      kind: /^HEYZO/.test(letters) ? 'heyzo' : 'standard'
+    }
+  }
+
+  return { code: s, sku: s.toLowerCase(), kind: 'unknown' }
 }
 
-async function javdbDetail(path, fetchImpl) {
-  const html = await get(`${JAVDB}${path}`, fetchImpl)
-  const cover =
-    html.match(/<img class="video-cover"[^>]+src="([^"]+)"/)?.[1] ??
-    html.match(/data-movie-detail-target="cover"[^>]+src="([^"]+)"/)?.[1] ??
-    ''
-  const titleMatch = html.match(/<title>\s*([\s\S]*?)\s*\|\s*JavDB/i)
-  const fullTitle = titleMatch ? stripTags(titleMatch[1]) : ''
-  // 详情页里番號被拆成 <a>SSNI</a>-589，去掉标签留下的空格
-  const code = (panelValue(html, '番號') || '').replace(/\s+/g, '')
-  // 标题去掉开头番号，只留描述部分
-  const title = fullTitle.replace(/^\s*[A-Za-z0-9-_]+\s+/, '').trim() || fullTitle
+const TOKEN_RE =
+  /(?:FC2[-_]?PPV[-_]?\d{6,7}|FC2[-_]?\d{6,7}|\d{2,3}[A-Za-z]{3,6}[-_]?\d{3,5}|[A-Za-z]{2,8}[-_ ]?\d{2,7})/g
+
+/** 从文本里提取全部番号（去重、保留顺序） */
+export function extractCodes(text) {
+  const s = String(text ?? '').toUpperCase()
+  const out = []
+  const re = new RegExp(TOKEN_RE.source, 'g')
+  let m
+  while ((m = re.exec(s))) {
+    const norm = normalizeCode(m[0])
+    if (norm.code && !out.includes(norm.code)) out.push(norm.code)
+  }
+  return out
+}
+
+/** 从文本里提取第一个番号 */
+export function extractCodeToken(text) {
+  const hits = extractCodes(text)
+  return hits.length ? hits[0] : null
+}
+
+/** 先当纯文本处理：从一段文字里抠出番号再规范化（如整个文件名） */
+export function parseCode(raw) {
+  return normalizeCode(extractCodeToken(String(raw ?? '')) || String(raw ?? ''))
+}
+
+/** 两个番号是否指同一部（忽略大小写、分隔符、DMM 前导零） */
+export function sameCode(a, b) {
+  const norm = (v) => String(v ?? '').toUpperCase().replace(/[-_\s]/g, '')
+  const x = norm(a)
+  const y = norm(b)
+  if (!x || !y) return false
+  if (x === y) return true
+  const pad = (v) => {
+    const m = v.match(/^(.*?)(\d{1,7})$/)
+    if (!m) return v
+    return `${m[1]}${String(Number(m[2])).padStart(5, '0')}`
+  }
+  return pad(x) === pad(y)
+}
+
+/* ------------------------------ 数据源 ------------------------------ */
+
+class SourceError extends Error {
+  constructor(message) {
+    super(message)
+    this.name = 'SourceError'
+  }
+}
+
+async function javdb(code, _sku, opts = {}) {
+  const list = await httpGet(`https://javdb.com/search?q=${encodeURIComponent(code)}&f=all`, {
+    cookie: 'over18=1; lang=zh',
+    timeout: opts.timeout
+  })
+  if (!list.ok) throw new SourceError(`JavDB 搜索页 HTTP ${list.status}`)
+  if (/Just a moment|cf-browser-verification|__cf_chl/i.test(list.text)) {
+    throw new SourceError('JavDB 要求通过 Cloudflare 校验')
+  }
+
+  const itemRe =
+    /<a href="(\/v\/[A-Za-z0-9]+)" class="box"[^>]*>[\s\S]*?<img[^>]*src="([^"]+)"[\s\S]*?<div class="video-title"><strong>([^<]*)<\/strong>([\s\S]*?)<\/div>/g
+  const items = []
+  let m
+  while ((m = itemRe.exec(list.text))) {
+    items.push({ path: m[1], cover: m[2], code: stripTags(m[3]), title: stripTags(m[4]) })
+  }
+
+  let hit = items.find((it) => sameCode(it.code, code))
+  if (!hit) hit = items.find((it) => it.code.toUpperCase().startsWith(code.split('-')[0]))
+  if (!hit) throw new SourceError('JavDB 没找到这个番号')
+
+  const page = await httpGet(`https://javdb.com${hit.path}`, {
+    cookie: 'over18=1; lang=zh',
+    timeout: opts.timeout
+  })
+  if (!page.ok) throw new SourceError(`JavDB 详情页 HTTP ${page.status}`)
+  const html = page.text
+
+  // value 里可能是纯文本，也可能包着 <a>，所以整段取出来再去标签
+  const label = (key) => {
+    const m = html.match(
+      new RegExp(`<strong>(?:${key}):<\\/strong>[\\s\\S]{0,120}?<span class="value">([\\s\\S]*?)<\\/span>`)
+    )
+    return m ? stripTags(m[1]) : ''
+  }
+  const actors = all(html, /<a class="actor-(?:female|male)"[^>]*href="\/actors\/[^"]*"[^>]*>([^<]*)<\/a>/i)
+  const genres = all(html, /<a href="\/tags\?c\d+=\d+"[^>]*>([^<]*)<\/a>/i)
+  const cover = one(html, /<img class="video-cover"[^>]*src="([^"]+)"/i) || hit.cover
+  const previews = uniq(
+    all(html, /<a class="tile-item[^"]*"[^>]*href="(https:\/\/[^"]+\.(?:jpg|jpeg|png|webp))"/i)
+  ).slice(0, 8)
+
+  return {
+    code: one(html, /<h2 class="title is-4">[\s\S]*?<strong>([^<]*)<\/strong>/i) || hit.code,
+    title: one(html, /<strong class="current-title">([^<]*)<\/strong>/i) || hit.title,
+    titleOriginal: one(html, /class="origin-title">([^<]*)</i),
+    overview: '',
+    cover,
+    thumb: cover,
+    previewImages: previews,
+    actors,
+    maker: label('片商|製作商'),
+    publisher: label('發行|发行'),
+    series: label('系列'),
+    director: label('導演|导演'),
+    genres,
+    releaseDate: label('日期').slice(0, 10),
+    runtime: parseInt(label('時長|时长'), 10) || undefined,
+    score: (() => {
+      const raw = one(html, /<strong>(?:評分|评分):<\/strong>[\s\S]{0,300}?([\d.]+)分/)
+      const v = Number(raw)
+      return v > 0 ? v : undefined
+    })(),
+    homepage: `https://javdb.com${hit.path}`,
+    provider: 'javdb'
+  }
+}
+
+async function jav321(code, sku, opts = {}) {
+  const page = await httpGet(`https://www.jav321.com/video/${encodeURIComponent(sku)}`, {
+    timeout: opts.timeout
+  })
+  if (!page.ok) throw new SourceError(`Jav321 HTTP ${page.status}`)
+  const html = page.text
+  if (!/<b>品番<\/b>/.test(html)) throw new SourceError('Jav321 没有这个番号的页面')
+
+  const segment = (key) => {
+    const m = html.match(new RegExp(`<b>${key}</b>:([\\s\\S]*?)<br>`))
+    return m ? m[1] : ''
+  }
+  const links = (seg) => all(seg, /<a[^>]*>([^<]*)<\/a>/)
+
+  return {
+    code: one(html, /<b>品番<\/b>: ?([^<]*)</i).toUpperCase() || code,
+    title: (() => {
+      const m = html.match(/<h3>([\s\S]*?)<small>/i)
+      return m ? stripTags(m[1]) : ''
+    })(),
+    titleOriginal: '',
+    overview: '',
+    cover: `https://pics.dmm.co.jp/digital/video/${sku}/${sku}pl.jpg`,
+    thumb: `https://pics.dmm.co.jp/digital/video/${sku}/${sku}ps.jpg`,
+    previewImages: uniq(
+      all(html, /src="(https?:\/\/pics\.dmm\.co\.jp\/digital\/video\/[^"]+\/[^"]+jp-\d+\.jpg)"/i)
+    ).slice(0, 8),
+    actors: links(segment('出演者')),
+    maker: links(segment('メーカー'))[0] ?? '',
+    publisher: '',
+    series: '',
+    director: '',
+    genres: links(segment('ジャンル')),
+    releaseDate: one(html, /<b>配信開始日<\/b>: ?([^<]*)</i).slice(0, 10),
+    runtime: parseInt(one(html, /<b>収録時間<\/b>: ?([^<]*)</i), 10) || undefined,
+    score: (() => {
+      const v = Number(one(html, /<b>平均評価<\/b>: ?([^<]*)</i))
+      return v > 0 ? v : undefined
+    })(),
+    homepage: `https://www.jav321.com/video/${sku}`,
+    provider: 'jav321'
+  }
+}
+
+async function dmm(code, sku, opts = {}) {
+  const page = await httpGet(`https://www.dmm.co.jp/digital/videoa/-/detail/=/cid=${encodeURIComponent(sku)}/`, {
+    cookie: 'age_check_done=1; ckcy=1',
+    timeout: opts.timeout
+  })
+  if (!page.ok) throw new SourceError(`DMM HTTP ${page.status}（多半被地域限制挡了）`)
+  const html = page.text
+  if (!/digital\/videoa/.test(html)) throw new SourceError('DMM 返回的不是影片页')
+
+  const og = (prop) => one(html, new RegExp(`<meta property="og:${prop}" content="([^"]*)"`, 'i'))
 
   return {
     code,
-    title,
-    cover,
-    overview: '', // javdb 本身不提供剧情简介
-    actors: panelLinks(html, '演員'),
-    maker: panelValue(html, '片商'),
-    label: panelValue(html, '發行'),
-    series: panelValue(html, '系列'),
-    director: panelValue(html, '導演'),
-    genres: panelLinks(html, '類別'),
-    releaseDate: panelValue(html, '日期'),
-    runtimeText: panelValue(html, '時長'),
-    scoreText: panelValue(html, '評分'),
-    url: `${JAVDB}${path}`
+    title: og('title') || one(html, /<h1[^>]*class="item-name"[^>]*>([\s\S]*?)<\/h1>/i),
+    titleOriginal: '',
+    overview: og('description'),
+    cover: `https://pics.dmm.co.jp/digital/video/${sku}/${sku}pl.jpg`,
+    thumb: `https://pics.dmm.co.jp/digital/video/${sku}/${sku}ps.jpg`,
+    previewImages: [],
+    actors: all(
+      html,
+      /href="https?:\/\/www\.dmm\.co\.jp\/mono\/digital\/videoa\/-?\/actress\/[\s\S]*?>([^<]*)</i
+    ),
+    maker: one(html, /<a href="[^"]*article=maker[^"]*"[^>]*>([\s\S]*?)<\/a>/i),
+    publisher: '',
+    series: one(html, /<a href="[^"]*article=series[^"]*"[^>]*>([\s\S]*?)<\/a>/i),
+    director: one(html, /<a href="[^"]*article=director[^"]*"[^>]*>([\s\S]*?)<\/a>/i),
+    genres: all(html, /<a href="[^"]*article=keyword[^"]*"[^>]*>([\s\S]*?)<\/a>/i),
+    releaseDate: (() => {
+      const m = html.match(/(\d{4})[\/年](\d{1,2})[\/月](\d{1,2})/i)
+      return m ? `${m[1]}-${String(m[2]).padStart(2, '0')}-${String(m[3]).padStart(2, '0')}` : ''
+    })(),
+    runtime: parseInt(one(html, />(\d{2,3})分</i), 10) || undefined,
+    score: undefined,
+    homepage: `https://www.dmm.co.jp/digital/videoa/-/detail/=/cid=${sku}/`,
+    provider: 'dmm'
   }
 }
 
-/* -------------------------------- dmm -------------------------------- */
+async function avsox(code, sku, opts = {}) {
+  const page = await httpGet(`https://avsox.net/jp/${encodeURIComponent(sku)}`, { timeout: opts.timeout })
+  if (!page.ok) throw new SourceError(`AVSOX HTTP ${page.status}`)
+  const html = page.text
+  if (!/品番/.test(html)) throw new SourceError('AVSOX 没有这个番号')
 
-/**
- * DMM 官方详情页（含剧情简介）。
- * 注意：DMM 对机房 IP 与非日本地区有风控，代理部署在日本 / 海外 VPS 时成功率更高。
- */
-async function dmmDetail(code, fetchImpl) {
-  const raw = normalizeCode(code)
-  // DMM 的内容 ID 形如 ssni00589：字母小写 + 数字补零到 5 位
-  const m = raw.match(/^([A-Z]+)(\d+)$/)
-  const cid = m ? `${m[1].toLowerCase()}${m[2].padStart(5, '0')}` : raw.toLowerCase()
-  const url = `https://www.dmm.co.jp/digital/videoa/-/detail/=/cid=${cid}/`
-  const html = await get(url, fetchImpl)
-
-  const title =
-    stripTags(html.match(/<h1 id="title"[^>]*>([\s\S]*?)<\/h1>/)?.[1] ?? '') ||
-    stripTags(html.match(/<title>([\s\S]*?)<\/title>/)?.[1] ?? '')
-  const cover = html.match(/<img[^>]+class="[^"]*tdmm[^"]*"[^>]+src="([^"]+)"/)?.[1] ?? ''
-  const overview = stripTags(
-    html.match(/<div class="mg-b20 lh4"[\s\S]*?>([\s\S]*?)<\/div>/)?.[1] ?? ''
-  )
-  const t = stripTags(html)
-
-  const pick = (label) => {
-    const re = new RegExp(`${label}[：:]\\s*([^\\s]+)`)
-    return t.match(re)?.[1] ?? ''
+  const info = (key) => {
+    const m = html.match(new RegExp(`<span class="header">${key}[:：]</span>([\\s\\S]*?)</p>`))
+    return m ? stripTags(m[1]) : ''
   }
+  const links = (seg) => all(seg, /<a[^>]*>([^<]*)<\/a>/)
 
   return {
-    code: raw,
-    title,
-    cover,
-    overview,
-    actors: [],
-    maker: pick('メーカー'),
-    label: pick('レーベル'),
-    series: pick('シリーズ'),
-    director: pick('監督'),
-    genres: (t.match(/ジャンル：[\s\S]{0,300}?/) ?? [''])[0]
-      .split(/[、,]/)
-      .map((s) => s.trim())
-      .filter(Boolean),
-    releaseDate: pick('発売日'),
-    runtimeText: pick('収録時間'),
-    scoreText: '',
-    url
-  }
-}
-
-/* ------------------------------ 对外入口 ------------------------------ */
-
-function toRuntime(text) {
-  const m = String(text || '').match(/(\d+)/)
-  return m ? Number(m[1]) : undefined
-}
-
-function toScore(text) {
-  const m = String(text || '').match(/([\d.]+)\s*分/)
-  return m ? Number(m[1]) : undefined
-}
-
-function emptyResult(code) {
-  return {
-    code: normalizeCode(code),
-    title: '',
+    code: info('品番').toUpperCase() || code,
+    title: (() => {
+      const m = html.match(/<h3>([\s\S]*?)<\/h3>/i)
+      return m ? stripTags(m[1]) : ''
+    })(),
+    titleOriginal: '',
     overview: '',
-    cover: '',
-    actors: [],
-    maker: '',
-    label: '',
+    cover: one(html, /<a class="bigImage"[^>]*href="([^"]+)"/i),
+    thumb: one(html, /<a class="bigImage"[^>]*href="([^"]+)"/i),
+    previewImages: uniq(all(html, /<a class="sample-box"[^>]*href="([^"]+)"/i)).slice(0, 8),
+    actors: links(info('出演者')),
+    maker: info('メーカー'),
+    publisher: '',
+    series: info('シリーズ'),
+    director: info('監督'),
+    genres: links(info('ジャンル')),
+    releaseDate: info('発売日').replace(/[年月]/g, '-').replace(/日/g, '').slice(0, 10),
+    runtime: parseInt(info('収録時間'), 10) || undefined,
+    score: undefined,
+    homepage: `https://avsox.net/jp/${sku}`,
+    provider: 'avsox'
+  }
+}
+
+async function mgstage(code, _sku, opts = {}) {
+  const page = await httpGet(`https://www.mgstage.com/product_detail.php?sku=${encodeURIComponent(code)}`, {
+    cookie: 'adc=1',
+    timeout: opts.timeout
+  })
+  if (!page.ok) throw new SourceError(`MGS HTTP ${page.status}`)
+  const html = page.text
+  if (!/品番/.test(html)) throw new SourceError('MGS 没有这个番号')
+
+  const info = (key) => {
+    const m = html.match(new RegExp(`${key}[\\s\\S]{0,40}?<td[^>]*>([\\s\\S]*?)</td>`, 'i'))
+    return m ? stripTags(m[1]) : ''
+  }
+
+  return {
+    code: info('品番').toUpperCase() || code,
+    title: one(html, /<h1[^>]*>([\s\S]*?)<\/h1>/i),
+    titleOriginal: '',
+    overview: one(html, /<p class="txt introduction"[^>]*>([\s\S]*?)<\/p>/i),
+    cover: one(html, /<a id="sample-imageEnlarge"[^>]*href="([^"]+)"/i),
+    thumb: '',
+    previewImages: [],
+    actors: all(html, /href="[^"]*\/search\/[^"]*actress[^"]*"[^>]*>([^<]*)<\/a>/i),
+    maker: info('メーカー'),
+    publisher: '',
+    series: info('シリーズ'),
+    director: '',
+    genres: all(html, /href="[^"]*\/search\/[^"]*genre[^"]*"[^>]*>([^<]*)<\/a>/i),
+    releaseDate: info('配信開始日').replace(/[年月]/g, '-').replace(/日/g, '').slice(0, 10),
+    runtime: parseInt(info('収録時間'), 10) || undefined,
+    score: undefined,
+    homepage: `https://www.mgstage.com/product_detail.php?sku=${code}`,
+    provider: 'mgstage'
+  }
+}
+
+async function fc2(code, _sku, opts = {}) {
+  const id = code.replace(/^FC2[-_]?(?:PPV[-_]?)?/i, '')
+  if (!/^\d{6,7}$/.test(id)) throw new SourceError('FC2 番号格式不对（应为 FC2-1234567）')
+
+  const page = await httpGet(`https://fc2club.net/html/FC2-${id}.html`, { timeout: opts.timeout })
+  if (!page.ok) throw new SourceError(`FC2 源 HTTP ${page.status}`)
+  const html = page.text
+
+  return {
+    code: `FC2-${id}`,
+    title: one(html, /<h1[^>]*>([\s\S]*?)<\/h1>/i) || one(html, /<title>([\s\S]*?)<\/title>/i),
+    titleOriginal: '',
+    overview: one(html, /<div class="movie_info"[^>]*>([\s\S]*?)<\/div>/i),
+    cover: one(html, /<img[^>]*class="[^"]*cover[^"]*"[^>]*src="([^"]+)"/i),
+    thumb: '',
+    previewImages: [],
+    actors: all(html, /href="\/actor\/[^"]*"[^>]*>([^<]*)<\/a>/i),
+    maker: 'FC2 业余',
+    publisher: '',
     series: '',
     director: '',
-    genres: [],
-    releaseDate: '',
+    genres: all(html, /href="\/genre\/[^"]*"[^>]*>([^<]*)<\/a>/i),
+    releaseDate: one(html, /<span[^>]*class="[^"]*date[^"]*"[^>]*>([\d-]{8,10})</i),
     runtime: undefined,
     score: undefined,
-    source: '',
-    url: ''
+    homepage: `https://fc2club.net/html/FC2-${id}.html`,
+    provider: 'fc2'
   }
+}
+
+const IMPL = {
+  javdb: (code, sku, opts) => javdb(code, sku, opts),
+  jav321: (code, sku, opts) => jav321(code, sku, opts),
+  dmm: (code, sku, opts) => dmm(code, sku, opts),
+  avsox: (code, sku, opts) => avsox(code, sku, opts),
+  mgstage: (code, sku, opts) => mgstage(code, sku, opts),
+  fc2: (code, sku, opts) => fc2(code, sku, opts)
+}
+
+/* ------------------------------ 合并 ------------------------------ */
+
+const ARRAY_KEYS = ['actors', 'genres', 'previewImages']
+const SCALAR_KEYS = [
+  'title',
+  'titleOriginal',
+  'overview',
+  'cover',
+  'thumb',
+  'maker',
+  'publisher',
+  'series',
+  'director',
+  'releaseDate',
+  'runtime',
+  'score'
+]
+
+const EMPTY = {
+  code: '',
+  title: '',
+  titleOriginal: '',
+  overview: '',
+  cover: '',
+  thumb: '',
+  previewImages: [],
+  actors: [],
+  maker: '',
+  publisher: '',
+  series: '',
+  director: '',
+  genres: [],
+  releaseDate: '',
+  runtime: undefined,
+  score: undefined,
+  homepage: '',
+  provider: ''
 }
 
 /**
- * 按番号刮削元数据
- * @param {string} code 番号，如 SSNI-589
- * @param {'auto'|'javdb'|'dmm'} source 数据源
- * @param {typeof fetch} fetchImpl
+ * 把各源结果合并成一条：先出现的源先填空位，后面的源只补空缺
+ * （同一个思路：AVDC 多站刮削 + OpenAver 的「只填空字段，不覆盖已有资料」）。
  */
-export async function scrape(code, source = 'auto', fetchImpl = globalThis.fetch) {
-  const clean = String(code || '').trim()
-  if (!clean) throw new Error('番号不能为空')
-  const want = source === 'auto' ? ['javdb', 'dmm'] : [source]
-  let lastError = null
-
-  for (const name of want) {
-    try {
-      let raw
-      if (name === 'javdb') {
-        const hit = await javdbSearch(clean, fetchImpl)
-        if (!hit) throw new Error('没有找到这个番号')
-        raw = await javdbDetail(hit.path, fetchImpl)
-        // 搜索卡片上的封面/日期在详情页缺失时补上
-        if (!raw.cover && hit.cover) raw.cover = hit.cover
-        if (!raw.releaseDate && hit.date) raw.releaseDate = hit.date
-        if (!raw.title && hit.title) raw.title = hit.title
-        if (!raw.code) raw.code = hit.code
-      } else if (name === 'dmm') {
-        raw = await dmmDetail(clean, fetchImpl)
-        if (!raw.title) throw new Error('DMM 未返回内容（可能受地区风控）')
-      } else {
-        throw new Error(`未知数据源：${name}`)
+export function mergeResults(raws) {
+  const merged = { ...EMPTY, previewImages: [], actors: [], genres: [] }
+  let first = null
+  for (const r of raws) {
+    if (!r) continue
+    if (!first) {
+      first = r
+      merged.code = r.code || merged.code
+      merged.homepage = r.homepage || merged.homepage
+      merged.provider = r.provider || merged.provider
+    }
+    for (const k of SCALAR_KEYS) {
+      const cur = merged[k]
+      if (cur === '' || cur === undefined) {
+        const v = r[k]
+        if (v !== '' && v !== undefined && v !== null) merged[k] = v
       }
-
-      return {
-        ...emptyResult(clean),
-        code: raw.code || clean,
-        title: raw.title,
-        overview: raw.overview || '',
-        cover: raw.cover || '',
-        actors: raw.actors ?? [],
-        maker: raw.maker ?? '',
-        label: raw.label ?? '',
-        series: raw.series ?? '',
-        director: raw.director ?? '',
-        genres: raw.genres ?? [],
-        releaseDate: raw.releaseDate ?? '',
-        runtime: toRuntime(raw.runtimeText),
-        score: toScore(raw.scoreText),
-        source: name,
-        url: raw.url ?? ''
-      }
-    } catch (err) {
-      lastError = err
-      if (source !== 'auto') throw err
+    }
+    for (const k of ARRAY_KEYS) {
+      if (Array.isArray(r[k]) && r[k].length) merged[k] = uniq([...merged[k], ...r[k]])
     }
   }
-  throw lastError ?? new Error('刮削失败')
+  return merged
 }
+
+/**
+ * 主入口：按链路抓取并合并结果。
+ * @param {string} input 番号或含番号的文件名
+ * @param {{sources?: string[], concurrency?: number, timeout?: number}} opts
+ */
+export async function scrape(
+  input,
+  { sources = DEFAULT_CHAIN, concurrency = 2, timeout = 9_000, enrich = false } = {}
+) {
+  const { code, sku, kind } = parseCode(input)
+  if (!code) throw new Error('番号为空')
+
+  const chain = (sources?.length ? sources : DEFAULT_CHAIN).filter((id) => IMPL[id])
+  const usable = kind === 'fc2' ? chain.filter((id) => id === 'fc2') : chain.filter((id) => id !== 'fc2')
+
+  const started = Date.now()
+  const states = []
+  const raws = []
+  let index = 0
+  let stop = false
+
+  const worker = async () => {
+    while (!stop && index < usable.length) {
+      const id = usable[index++]
+      const t0 = Date.now()
+      try {
+        const data = await IMPL[id](code, sku, { timeout })
+        raws.push(data)
+        states.push({ id, ok: true, ms: Date.now() - t0 })
+        // JavDB 一家就能给出标题/封面/演员/片商，默认拿它一个就收工（省对方站点资源）
+        if (!enrich && id === 'javdb') stop = true
+      } catch (err) {
+        states.push({
+          id,
+          ok: false,
+          ms: Date.now() - t0,
+          note: err instanceof Error ? err.message : String(err)
+        })
+      }
+    }
+  }
+
+  await Promise.all(
+    Array.from({ length: Math.max(1, Math.min(concurrency, usable.length || 1)) }, () => worker())
+  )
+
+  // 合并顺序固定为配置的链路顺序，不跟着网络快慢变
+  const ordered = usable.map((id) => raws.find((r) => r.provider === id)).filter(Boolean)
+  const merged = mergeResults(ordered)
+  if (!merged.title && !merged.cover) {
+    const reason = states
+      .filter((s) => !s.ok)
+      .map((s) => `${s.id}: ${s.note ?? '无结果'}`)
+      .join(' · ')
+    throw new Error(reason || '所有数据源都没有结果')
+  }
+
+  // 图床有 http 链接，App 跑在 https 里会被混合内容拦掉，统一升到 https
+  const https = (u) => String(u || '').replace(/^http:\/\//i, 'https://')
+
+  return {
+    ...merged,
+    code: merged.code || code,
+    cover: https(merged.cover),
+    thumb: https(merged.thumb),
+    previewImages: merged.previewImages.map(https).slice(0, 10),
+    elapsed: Date.now() - started,
+    sources: states
+  }
+}
+
+export default scrape

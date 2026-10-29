@@ -7,7 +7,7 @@ import { pickImage } from '../lib/dom'
 import { zoneStore } from '../store/zone'
 import { useVaultSession } from '../store/vaultSession'
 import { useSettings } from '../store/settings'
-import { javToTitlePatch, scrapeJav } from '../lib/jav'
+import { javImageUrl, javToTitlePatch, scrapeJav, type JavResult, type JavSettings } from '../lib/jav'
 import { blankTitle } from '../lib/addTitle'
 import type { MediaKind, TitleItem, WatchStatus } from '../types'
 import { STATUS_LABEL, STATUS_ORDER, newId } from '../types'
@@ -35,6 +35,7 @@ export default function AddItem() {
   const settings = useSettings()
   const [javCode, setJavCode] = useState('')
   const [javBusy, setJavBusy] = useState(false)
+  const [javResult, setJavResult] = useState<JavResult | null>(null)
 
   useEffect(() => {
     if (!id) return
@@ -52,7 +53,7 @@ export default function AddItem() {
 
   useEffect(() => {
     return () => {
-      if (posterPreview) URL.revokeObjectURL(posterPreview)
+      if (posterPreview?.startsWith('blob:')) URL.revokeObjectURL(posterPreview)
     }
   }, [posterPreview])
 
@@ -78,6 +79,18 @@ export default function AddItem() {
     })
   }
 
+  const javSettings: JavSettings = {
+    enabled: true,
+    backend: settings.javBackend,
+    endpoint: settings.javEndpoint,
+    token: settings.javToken,
+    sources: settings.javSources,
+    provider: settings.javProvider,
+    enrich: settings.javEnrich,
+    titleLang: settings.javTitleLang,
+    imageProxy: settings.javImageProxy
+  }
+
   const runScrape = async () => {
     if (!javCode.trim()) {
       toast('先填番号', 'bad')
@@ -85,16 +98,8 @@ export default function AddItem() {
     }
     setJavBusy(true)
     try {
-      const res = await scrapeJav(
-        {
-          enabled: true,
-          endpoint: settings.javEndpoint,
-          source: settings.javSource,
-          token: settings.javToken
-        },
-        javCode
-      )
-      const { tags, ...patch } = javToTitlePatch(res)
+      const res = await scrapeJav(javSettings, javCode)
+      const { tags, ...patch } = javToTitlePatch(res, { titleLang: settings.javTitleLang })
       setDraft((d) => ({
         ...d,
         ...patch,
@@ -104,15 +109,22 @@ export default function AddItem() {
       if (patch.cast?.length) setCastText(patch.cast.join('、'))
       if (patch.genres?.length) setGenreText(patch.genres.join('、'))
       if (tags?.length) setTagText((prev) => (prev.trim() ? prev : tags.join('、')))
-      if (patch.posterRemote) {
-        setRemoteUrl(patch.posterRemote)
+
+      const cover = res.cover || res.thumb
+      if (cover) {
+        const usable = javImageUrl(javSettings, cover)
+        setRemoteUrl(usable)
         setPosterBlob(null)
         setPosterPreview((prev) => {
           if (prev) URL.revokeObjectURL(prev)
-          return null
+          return usable
         })
       }
-      toast(res.overview ? '已填充，确认后保存' : '已填充（该源无简介，可自己写）', 'good')
+      setJavResult(res)
+      toast(
+        res.overview ? '已填充，确认后保存' : '已填充（JavDB 没有简介，可在设置里开「补全简介」）',
+        'good'
+      )
     } catch (e) {
       toast(e instanceof Error ? e.message : '刮削失败', 'bad')
     } finally {
@@ -213,8 +225,75 @@ export default function AddItem() {
             </Button>
           </div>
           <p className="mt-1.5 text-[0.6875rem] leading-relaxed text-ink-faint">
-            番号会发送到你在「设置 → 番号刮削」里填的服务地址。{settings.javEndpoint ? '' : '还没填地址，先去设置里配一个。'}
+            番号会发往你在「设置 → 番号刮削」里填的服务地址，也可以直接粘贴文件名（会自动抠番号）。
+            {settings.javEndpoint ? '' : '还没填地址，先去设置里配一个。'}
           </p>
+
+          {javResult && (
+            <div className="mt-3 rounded-xl border border-white bg-white p-3">
+              <div className="flex gap-3">
+                {javResult.cover ? (
+                  <img
+                    src={javImageUrl(javSettings, javResult.cover)}
+                    alt=""
+                    className="h-[112px] w-[78px] shrink-0 rounded-lg object-cover"
+                  />
+                ) : (
+                  <div className="h-[112px] w-[78px] shrink-0 rounded-lg bg-paper-line" />
+                )}
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-[0.875rem] font-medium">
+                    {javResult.title || javResult.code}
+                  </div>
+                  <div className="font-mono text-[0.6875rem] text-ink-faint">{javResult.code}</div>
+                  <div className="mt-1 text-[0.75rem] text-ink-soft">
+                    {[
+                      javResult.releaseDate,
+                      javResult.runtime ? `${javResult.runtime} 分钟` : '',
+                      javResult.maker,
+                      javResult.score ? `评分 ${javResult.score}` : ''
+                    ]
+                      .filter(Boolean)
+                      .join(' · ')}
+                  </div>
+                  {javResult.overview && (
+                    <p className="mt-1 line-clamp-3 text-[0.6875rem] leading-relaxed text-ink-faint">
+                      {javResult.overview}
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {javResult.actors.length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-1">
+                  {javResult.actors.map((a) => (
+                    <span
+                      key={a}
+                      className="rounded-md bg-reel-soft/60 px-1.5 py-0.5 text-[0.6875rem] text-reel-dark"
+                    >
+                      {a}
+                    </span>
+                  ))}
+                </div>
+              )}
+
+              <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[0.625rem]">
+                {(javResult.sources ?? []).map((s) => (
+                  <span
+                    key={s.id}
+                    title={s.note ?? ''}
+                    className={clsx('font-mono', s.ok ? 'text-moss' : 'text-ink-faint')}
+                  >
+                    {s.id} {s.ok ? '✓' : '✕'}
+                  </span>
+                ))}
+                <span className="ml-auto font-mono text-ink-faint">
+                  {javResult.provider} · {javResult.elapsed ?? 0}ms
+                  {javResult.cached ? ' · 缓存' : ''}
+                </span>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
