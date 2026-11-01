@@ -35,7 +35,7 @@ export default function Avatar({
     return (
       <div
         className={clsx(
-          'flex items-center justify-center bg-paper font-medium text-ink-soft',
+          'flex items-center justify-center bg-paper-sunken font-medium text-ink-soft',
           className
         )}
       >
@@ -59,7 +59,7 @@ function initials(name: string): string {
   const trimmed = name.trim()
   if (!trimmed) return '?'
   // 中文取最后两个字，英文取首字母
-  if (/[\u4e00-\u9fa5]/.test(trimmed)) return trimmed.slice(-2)
+  if (/[一-龥]/.test(trimmed)) return trimmed.slice(-2)
   const parts = trimmed.split(/\s+/)
   if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase()
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()

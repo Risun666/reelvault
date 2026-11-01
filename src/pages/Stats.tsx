@@ -1,8 +1,9 @@
 import { useMemo } from 'react'
+import clsx from 'clsx'
 import { useLibraryStore } from '../store/zone'
 import { computeStats, formatMinutes } from '../lib/stats'
 import { STATUS_LABEL, STATUS_ORDER } from '../types'
-import { EmptyState } from '../components/ui'
+import { EmptyState, Section } from '../components/ui'
 import { Link } from 'react-router-dom'
 import { useCollections } from '../store/collections'
 
@@ -14,7 +15,7 @@ export default function Stats() {
 
   if (ready && items.length === 0) {
     return (
-      <div className="mx-auto max-w-[560px]">
+      <div className="mx-auto max-w-[560px] px-4 pb-10 pt-safe">
         <Header />
         <EmptyState icon="chart" title="还没有数据" desc="收藏几部影片后，这里会生成你的观影统计。" />
       </div>
@@ -29,39 +30,65 @@ export default function Stats() {
     <div className="mx-auto max-w-[560px] px-4 pb-10 pt-safe">
       <Header />
 
-      <div className="grid grid-cols-2 gap-3">
-        <StatCard label="收藏总数" value={String(stats.total)} sub={`电影 ${stats.movies} · 剧集 ${stats.tvs}`} />
-        <StatCard label="累计观看时长" value={formatMinutes(stats.minutes)} sub={`剧集已看 ${stats.episodes} 集`} />
+      <section className="mb-6 grid grid-cols-2 gap-3">
         <StatCard
+          index={0}
+          label="收藏总数"
+          value={String(stats.total)}
+          sub={`电影 ${stats.movies} · 剧集 ${stats.tvs}`}
+        />
+        <StatCard
+          index={1}
+          label="累计观看时长"
+          value={formatMinutes(stats.minutes)}
+          sub={`剧集已看 ${stats.episodes} 集`}
+        />
+        <StatCard
+          index={2}
           label="已看完"
           value={String(stats.byStatus.done)}
           sub={`在看 ${stats.byStatus.watching} · 想看 ${stats.byStatus.wish}`}
         />
         <StatCard
+          index={3}
           label="平均评分"
           value={stats.avgRating ? stats.avgRating.toFixed(2) : '—'}
           sub={`${stats.rated} 部已评分`}
         />
-      </div>
+      </section>
 
-      <div className="mt-3 grid grid-cols-2 gap-3">
-        <Link to="/collections" className="rounded-2xl border border-paper-line bg-white p-3.5 active:bg-paper">
-          <div className="text-[0.6875rem] text-ink-faint">片单合集</div>
-          <div className="mt-1 text-[1.25rem] font-semibold leading-none">{collections.length}</div>
-          <div className="mt-1.5 text-[0.6875rem] text-reel">去整理 →</div>
-        </Link>
-        <Link to="/discover" className="rounded-2xl border border-paper-line bg-white p-3.5 active:bg-paper">
-          <div className="text-[0.6875rem] text-ink-faint">发现与榜单</div>
-          <div className="mt-1 text-[1.25rem] font-semibold leading-none">TMDB</div>
-          <div className="mt-1.5 text-[0.6875rem] text-reel">找片 →</div>
-        </Link>
-      </div>
+      <Section title="快捷入口">
+        <div className="grid grid-cols-2 gap-3">
+          <Link
+            to="/collections"
+            className="animate-staggerIn rounded-2xl border border-paper-line bg-paper-card p-4 shadow-e1 pressable"
+          >
+            <div className="text-caption text-ink-faint">片单合集</div>
+            <div className="mt-1.5 font-display text-headline font-semibold leading-none tabular-nums text-ink">
+              {collections.length}
+            </div>
+            <div className="mt-2 text-caption font-medium text-reel-dark">去整理 →</div>
+          </Link>
+          <Link
+            to="/discover"
+            className="animate-staggerIn rounded-2xl border border-paper-line bg-paper-card p-4 shadow-e1 pressable"
+            style={{ animationDelay: '28ms' }}
+          >
+            <div className="text-caption text-ink-faint">发现与榜单</div>
+            <div className="mt-1.5 font-display text-headline font-semibold leading-none text-ink">
+              TMDB
+            </div>
+            <div className="mt-2 text-caption font-medium text-reel-dark">找片 →</div>
+          </Link>
+        </div>
+      </Section>
 
       <Panel title="观看状态分布">
-        <div className="space-y-2.5">
-          {STATUS_ORDER.map((s) => (
+        <div className="space-y-3">
+          {STATUS_ORDER.map((s, i) => (
             <Bar
               key={s}
+              index={i}
               label={STATUS_LABEL[s]}
               value={stats.byStatus[s]}
               max={maxStatus}
@@ -73,11 +100,18 @@ export default function Stats() {
 
       <Panel title="评分分布">
         {stats.rated === 0 ? (
-          <p className="text-[0.8125rem] text-ink-faint">还没有给任何影片打过分。</p>
+          <p className="text-body-sm text-ink-faint">还没有给任何影片打过分。</p>
         ) : (
-          <div className="space-y-2.5">
-            {[...stats.ratingDist].reverse().map((d) => (
-              <Bar key={d.stars} label={`${d.stars} 星`} value={d.count} max={Math.max(1, ...stats.ratingDist.map((x) => x.count))} tone="reel" />
+          <div className="space-y-3">
+            {[...stats.ratingDist].reverse().map((d, i) => (
+              <Bar
+                key={d.stars}
+                index={i}
+                label={`${d.stars} 星`}
+                value={d.count}
+                max={Math.max(1, ...stats.ratingDist.map((x) => x.count))}
+                tone="reel"
+              />
             ))}
           </div>
         )}
@@ -85,9 +119,9 @@ export default function Stats() {
 
       {stats.topGenres.length > 0 && (
         <Panel title="偏爱类型">
-          <div className="space-y-2.5">
-            {stats.topGenres.map(([g, c]) => (
-              <Bar key={g} label={g} value={c} max={maxGenre} tone="ink" />
+          <div className="space-y-3">
+            {stats.topGenres.map(([g, c], i) => (
+              <Bar key={g} index={i} label={g} value={c} max={maxGenre} tone="ink" />
             ))}
           </div>
         </Panel>
@@ -95,16 +129,30 @@ export default function Stats() {
 
       {stats.monthly.length > 1 && (
         <Panel title="近 12 个月记录趋势">
-          <div className="flex h-28 items-end gap-1.5">
-            {stats.monthly.map((m) => (
-              <div key={m.month} className="flex flex-1 flex-col items-center gap-1">
-                <div
-                  className="w-full rounded-t bg-ink/75"
-                  style={{ height: `${Math.max(4, (m.count / maxMonth) * 88)}px` }}
-                />
-                <span className="text-[0.5625rem] text-ink-faint">{m.month.slice(5)}</span>
-              </div>
-            ))}
+          <div className="rounded-xl bg-paper-sunken p-3">
+            <div className="flex h-24 items-end gap-1.5">
+              {stats.monthly.map((m, i) => (
+                <div key={m.month} className="flex h-full flex-1 flex-col justify-end">
+                  <div
+                    className="animate-staggerIn w-full rounded-t-lg bg-reel"
+                    style={{
+                      height: `${Math.max(4, (m.count / maxMonth) * 88)}px`,
+                      animationDelay: `${Math.min(i, 10) * 28}ms`
+                    }}
+                  />
+                </div>
+              ))}
+            </div>
+            <div className="mt-1.5 flex gap-1.5 border-t border-paper-line pt-1.5">
+              {stats.monthly.map((m) => (
+                <span
+                  key={m.month}
+                  className="flex-1 text-center text-micro tabular-nums text-ink-faint"
+                >
+                  {m.month.slice(5)}
+                </span>
+              ))}
+            </div>
           </div>
         </Panel>
       )}
@@ -113,8 +161,11 @@ export default function Stats() {
         <Panel title="常用标签">
           <div className="flex flex-wrap gap-2">
             {stats.topTags.map(([t, c]) => (
-              <span key={t} className="rounded-full bg-paper px-2.5 py-1 text-[0.75rem] text-ink-soft">
-                #{t} <span className="text-ink-faint">{c}</span>
+              <span
+                key={t}
+                className="rounded-full bg-paper-sunken px-2.5 py-1 text-caption text-ink-soft"
+              >
+                #{t} <span className="tabular-nums text-ink-faint">{c}</span>
               </span>
             ))}
           </div>
@@ -126,28 +177,46 @@ export default function Stats() {
 
 function Header() {
   return (
-    <header className="pb-3 pt-2">
-      <h1 className="text-[1.5rem] font-semibold tracking-tight">观影统计</h1>
-      <p className="mt-0.5 text-[0.75rem] text-ink-faint">只统计公开片库的数据</p>
+    <header className="pb-5 pt-3">
+      <h1 className="font-display text-page font-semibold leading-tight tracking-tight text-ink">
+        观影统计
+      </h1>
+      <p className="mt-1 text-caption text-ink-faint">只统计公开片库的数据</p>
     </header>
   )
 }
 
 function Panel({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section className="mt-5 rounded-2xl border border-paper-line bg-white p-4">
-      <h2 className="mb-3 text-[0.75rem] font-medium uppercase tracking-wide text-ink-faint">{title}</h2>
-      {children}
-    </section>
+    <Section title={title}>
+      <div className="rounded-2xl border border-paper-line bg-paper-card p-4 shadow-e1">
+        {children}
+      </div>
+    </Section>
   )
 }
 
-function StatCard({ label, value, sub }: { label: string; value: string; sub?: string }) {
+function StatCard({
+  index,
+  label,
+  value,
+  sub
+}: {
+  index: number
+  label: string
+  value: string
+  sub?: string
+}) {
   return (
-    <div className="rounded-2xl border border-paper-line bg-white p-3.5">
-      <div className="text-[0.6875rem] text-ink-faint">{label}</div>
-      <div className="mt-1 text-[1.25rem] font-semibold leading-none">{value}</div>
-      {sub && <div className="mt-1.5 text-[0.6875rem] text-ink-faint">{sub}</div>}
+    <div
+      className="animate-staggerIn rounded-2xl border border-paper-line bg-paper-card p-4 shadow-e1"
+      style={{ animationDelay: `${Math.min(index, 10) * 28}ms` }}
+    >
+      <div className="text-caption text-ink-faint">{label}</div>
+      <div className="mt-1.5 break-words font-display text-display tabular-nums leading-tight text-ink">
+        {value}
+      </div>
+      {sub && <div className="mt-2 text-micro text-ink-faint">{sub}</div>}
     </div>
   )
 }
@@ -156,24 +225,32 @@ function Bar({
   label,
   value,
   max,
-  tone
+  tone,
+  index = 0
 }: {
   label: string
   value: number
   max: number
   tone: 'ink' | 'reel'
+  index?: number
 }) {
   const pct = max ? (value / max) * 100 : 0
   return (
     <div className="flex items-center gap-3">
-      <span className="w-14 shrink-0 text-[0.75rem] text-ink-soft">{label}</span>
-      <div className="h-2 flex-1 overflow-hidden rounded-full bg-paper">
+      <span className="w-14 shrink-0 truncate text-caption text-ink-soft">{label}</span>
+      <div className="h-2 flex-1 overflow-hidden rounded-full bg-paper-sunken">
         <div
-          className={tone === 'reel' ? 'h-full rounded-full bg-reel' : 'h-full rounded-full bg-ink/70'}
-          style={{ width: `${Math.max(pct, value > 0 ? 6 : 0)}%` }}
+          className={clsx(
+            'animate-fadeIn h-full rounded-full',
+            tone === 'reel' ? 'bg-reel' : 'bg-ink/70'
+          )}
+          style={{
+            width: `${Math.max(pct, value > 0 ? 6 : 0)}%`,
+            animationDelay: `${Math.min(index, 10) * 28}ms`
+          }}
         />
       </div>
-      <span className="w-6 shrink-0 text-right text-[0.75rem] tabular-nums text-ink-faint">{value}</span>
+      <span className="w-6 shrink-0 text-right text-caption tabular-nums text-ink-faint">{value}</span>
     </div>
   )
 }

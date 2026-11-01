@@ -2,6 +2,8 @@ interface Props {
   name: IconName
   className?: string
   size?: number
+  /** 描边粗细：默认 1.7，强调态可用 2.1 */
+  weight?: number
 }
 
 export type IconName =
@@ -81,7 +83,7 @@ const STROKE_ONLY: IconName[] = [
   'image', 'tag', 'eyeOff', 'refresh', 'share', 'star', 'mail', 'user'
 ]
 
-export default function Icon({ name, className = '', size = 22 }: Props) {
+export default function Icon({ name, className = '', size = 22, weight }: Props) {
   const filled = !STROKE_ONLY.includes(name)
   return (
     <svg
@@ -90,7 +92,7 @@ export default function Icon({ name, className = '', size = 22 }: Props) {
       viewBox="0 0 24 24"
       fill={filled ? 'currentColor' : 'none'}
       stroke="currentColor"
-      strokeWidth={filled ? 0 : 1.7}
+      strokeWidth={filled ? 0 : (weight ?? 1.7)}
       strokeLinecap="round"
       strokeLinejoin="round"
       className={className}

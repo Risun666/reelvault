@@ -12,7 +12,7 @@ import type { TitleItem } from '../types'
 import Avatar from '../components/Avatar'
 import Poster from '../components/Poster'
 import Icon from '../components/Icon'
-import { Button, Confirm, Field, Sheet, inputCls } from '../components/ui'
+import { Button, Confirm, Field, IconButton, Section, Sheet, inputCls } from '../components/ui'
 import { toast } from '../components/Toast'
 
 export default function ActorDetail() {
@@ -56,7 +56,7 @@ export default function ActorDetail() {
     return (
       <div className="mx-auto max-w-[560px] px-4 pb-10 pt-safe">
         <BackBar zone={currentZone} />
-        <div className="mt-10 text-center text-[0.875rem] text-ink-faint">
+        <div className="mt-14 text-center text-body-sm text-ink-faint">
           {person ? '隐私空间已上锁' : '没有找到这位演员'}
         </div>
       </div>
@@ -103,93 +103,98 @@ export default function ActorDetail() {
     <div className="mx-auto max-w-[560px] px-4 pb-10 pt-safe">
       <BackBar
         zone={currentZone}
-        right={
-          <button onClick={() => setEditOpen(true)} className="p-1.5">
-            <Icon name="edit" size={18} />
-          </button>
-        }
+        right={<IconButton icon="edit" label="编辑资料" size={44} onClick={() => setEditOpen(true)} />}
       />
 
-      <div className="mt-2 flex items-start gap-3.5">
-        <button onClick={() => void uploadAvatar()} className="shrink-0">
+      {/* ---------------------------------------------------------- 头像 hero */}
+      <section className="animate-staggerIn mb-6 flex items-start gap-4 rounded-2xl border border-paper-line bg-paper-card p-4 shadow-e1">
+        <button onClick={() => void uploadAvatar()} className="shrink-0 pressable">
           <Avatar
             zone={currentZone}
             person={person}
-            className="h-20 w-20 rounded-full border border-paper-line bg-paper"
-            textClass="text-[1.125rem]"
+            className="h-24 w-24 rounded-full border border-paper-line bg-paper-sunken shadow-e2"
+            textClass="font-display text-headline"
           />
         </button>
-        <div className="min-w-0 flex-1 pt-1">
-          <h1 className="text-[1.375rem] font-semibold leading-tight tracking-tight">
+        <div className="min-w-0 flex-1 pt-0.5">
+          <h1 className="font-display text-headline font-semibold leading-tight tracking-tight text-ink">
             {person.name}
           </h1>
-          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[0.75rem] text-ink-faint">
+          <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-caption text-ink-faint">
             <span>{works.length} 部作品</span>
             {person.birthday ? (
               <>
-                <span>·</span>
+                <span aria-hidden>·</span>
                 <span>{person.birthday}</span>
               </>
             ) : null}
-            <span>·</span>
+            <span aria-hidden>·</span>
             <span>{person.source === 'manual' ? '手动添加' : '自动生成'}</span>
           </div>
           {person.note && (
-            <p className="mt-2 whitespace-pre-wrap text-[0.8125rem] leading-relaxed text-ink-soft">
+            <p className="mt-2 whitespace-pre-wrap text-body-sm leading-relaxed text-ink-soft">
               {person.note}
             </p>
           )}
-          <button
-            onClick={() => void uploadAvatar()}
-            className="mt-2 text-[0.75rem] text-reel underline decoration-reel/30"
-          >
+          <Button variant="tonal" className="mt-3" onClick={() => void uploadAvatar()}>
+            <Icon name="upload" size={15} weight={2.1} />
             {person.hasLocalAvatar ? '更换头像' : '上传头像'}
-          </button>
+          </Button>
         </div>
-      </div>
+      </section>
 
-      <div className="mt-5 flex items-center justify-between">
-        <h2 className="text-[0.75rem] font-medium uppercase tracking-wide text-ink-faint">
-          出演作品
-        </h2>
-        <button
-          onClick={() => setLinkOpen(true)}
-          className="flex items-center gap-1 rounded-full border border-paper-line px-2.5 py-1 text-[0.75rem] text-ink-soft active:bg-paper"
-        >
-          <Icon name="plus" size={13} /> 关联影片
-        </button>
-      </div>
+      <Section
+        title="出演作品"
+        action={
+          <Button variant="tonal" onClick={() => setLinkOpen(true)}>
+            <Icon name="plus" size={15} weight={2.2} />
+            关联影片
+          </Button>
+        }
+      >
+        {works.length === 0 ? (
+          <p className="rounded-2xl border border-dashed border-paper-lineStrong bg-paper-sunken px-4 py-8 text-center text-body-sm leading-relaxed text-ink-faint">
+            还没有关联影片，点右上角「关联影片」添加。
+          </p>
+        ) : (
+          <div
+            className="grid"
+            style={{
+              gridTemplateColumns: `repeat(${theme.columns}, minmax(0, 1fr))`,
+              gap: gapOf(theme.density)
+            }}
+          >
+            {works.map((t, idx) => (
+              <Link
+                key={t.id}
+                to={`/title/${currentZone}/${t.id}`}
+                className="animate-staggerIn pressable block"
+                style={{ animationDelay: `${Math.min(idx, 10) * 28}ms` }}
+              >
+                <div className="relative">
+                  <Poster zone={currentZone} item={t} />
+                  {t.rating ? (
+                    <span className="pointer-events-none absolute right-1.5 top-1.5 flex items-center gap-0.5 rounded-full bg-paper-card/92 px-1.5 py-0.5 text-micro font-semibold tabular-nums text-reel-dark shadow-e1 backdrop-blur-sm">
+                      <Icon name="starFill" size={9} />
+                      {(t.rating / 2).toFixed(1)}
+                    </span>
+                  ) : null}
+                </div>
+                <div className="pt-2">
+                  <div className="truncate text-label font-medium leading-snug text-ink">
+                    {t.title}
+                  </div>
+                  <div className="mt-0.5 text-micro tabular-nums text-ink-faint">{t.year || '—'}</div>
+                </div>
+              </Link>
+            ))}
+          </div>
+        )}
+      </Section>
 
-      {works.length === 0 ? (
-        <p className="mt-3 rounded-xl border border-dashed border-paper-line bg-paper/50 py-6 text-center text-[0.8125rem] text-ink-faint">
-          还没有关联影片，点右上角「关联影片」添加。
-        </p>
-      ) : (
-        <div
-          className="mt-3 grid"
-          style={{
-            gridTemplateColumns: `repeat(${theme.columns}, minmax(0, 1fr))`,
-            gap: gapOf(theme.density)
-          }}
-        >
-          {works.map((t) => (
-            <Link
-              key={t.id}
-              to={`/title/${currentZone}/${t.id}`}
-              className="block transition-transform active:scale-[0.97]"
-            >
-              <Poster zone={currentZone} item={t} />
-              <div className="mt-1.5 truncate text-[0.8125rem] font-medium leading-tight">
-                {t.title}
-              </div>
-              <div className="text-[0.6875rem] text-ink-faint">{t.year || '—'}</div>
-            </Link>
-          ))}
-        </div>
-      )}
-
-      <div className="mt-6">
-        <Button variant="ghost" className="w-full text-reel" onClick={() => setConfirmDelete(true)}>
+      <div className="mt-2">
+        <Button variant="danger" className="w-full" onClick={() => setConfirmDelete(true)}>
+          <Icon name="trash" size={16} weight={2.1} />
           删除这位演员
         </Button>
       </div>
@@ -236,7 +241,7 @@ export default function ActorDetail() {
         />
         <div className="mt-3 max-h-[52vh] space-y-1.5 overflow-y-auto">
           {candidates.length === 0 ? (
-            <p className="py-6 text-center text-[0.8125rem] text-ink-faint">没有影片</p>
+            <p className="py-6 text-center text-body-sm text-ink-faint">没有影片</p>
           ) : (
             candidates.map((t) => {
               const inside = person.titleIds.includes(t.id)
@@ -245,16 +250,16 @@ export default function ActorDetail() {
                   key={t.id}
                   onClick={() => void toggleTitle(t.id)}
                   className={clsx(
-                    'flex w-full items-center justify-between gap-2 rounded-xl border px-3 py-2.5 text-left',
+                    'flex w-full items-center justify-between gap-2 rounded-xl border px-3 py-2.5 text-left pressable',
                     inside
                       ? 'border-reel/35 bg-reel-soft/60'
-                      : 'border-paper-line bg-white active:bg-paper'
+                      : 'border-paper-line bg-paper-card hover:border-paper-lineStrong active:bg-paper-sunken'
                   )}
                 >
-                  <span className="min-w-0 flex-1 truncate text-[0.875rem]">{t.title}</span>
+                  <span className="min-w-0 flex-1 truncate text-body-sm text-ink">{t.title}</span>
                   <span
                     className={clsx(
-                      'shrink-0 text-[0.75rem]',
+                      'shrink-0 text-caption font-medium',
                       inside ? 'text-reel-dark' : 'text-ink-faint'
                     )}
                   >
@@ -288,14 +293,18 @@ export default function ActorDetail() {
 function BackBar({ zone, right }: { zone: Zone; right?: React.ReactNode }) {
   const navigate = useNavigate()
   return (
-    <header className="flex items-center justify-between pb-2 pt-2">
-      <button onClick={() => navigate(zone === 'vault' ? '/vault' : '/')} className="-ml-1 p-1.5">
-        <Icon name="chevronLeft" size={20} />
-      </button>
-      <div className="text-[0.75rem] text-ink-faint">
+    <header className="flex items-center justify-between gap-2 pb-3 pt-3">
+      <IconButton
+        icon="chevronLeft"
+        label="返回"
+        size={44}
+        className="-ml-1.5"
+        onClick={() => navigate(zone === 'vault' ? '/vault' : '/')}
+      />
+      <div className="text-caption text-ink-faint">
         {zone === 'vault' ? '隐私保险箱' : '我的片库'}
       </div>
-      {right ?? <span className="w-8" />}
+      {right ?? <span className="w-11" />}
     </header>
   )
 }

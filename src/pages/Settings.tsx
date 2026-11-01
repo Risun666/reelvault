@@ -144,7 +144,8 @@ export default function Settings() {
         vaultMode,
         pin: vaultMode === 'encrypted' ? exportPin : undefined
       })
-      const stamp = new Date().toISOString().slice(0, 16).replace(/[-:T]/g, '')
+      // 只保留数字后取前 12 位 = YYYYMMDDHHmm（避免出现中括号字符类被误当成 Tailwind 候选）
+      const stamp = new Date().toISOString().replace(/\D/g, '').slice(0, 12)
       downloadJson(backup, `reelvault-backup-${stamp}.json`)
       setExportSheet(false)
       setExportPin('')
@@ -201,15 +202,15 @@ export default function Settings() {
 
   return (
     <div className="mx-auto max-w-[560px] px-4 pb-10 pt-safe">
-      <header className="pb-3 pt-2">
-        <h1 className="text-[1.5rem] font-semibold tracking-tight">设置</h1>
-        <p className="mt-0.5 text-[0.75rem] text-ink-faint">数据全部保存在本机，随时可导出带走</p>
+      <header className="pb-5 pt-3">
+        <h1 className="font-display text-page font-semibold tracking-tight text-ink">设置</h1>
+        <p className="mt-1 text-caption text-ink-faint">数据全部保存在本机，随时可导出带走</p>
       </header>
 
       <UpdatePanel />
 
       {/* 数据来源 */}
-      <Group title="数据来源">
+      <Group title="数据来源" index={1}>
         <ToggleRow
           label="使用内置 API Key"
           desc="已内置一个能直接用的 Key，不用自己去申请。它是共享的，额度被打满时会限流，换成自己的更稳。"
@@ -220,7 +221,7 @@ export default function Settings() {
           }}
         />
         {!settings.useBuiltInKey && (
-          <div className="mt-2">
+          <div className="pt-2">
             <Field label="自定义 TMDB API Key">
               <input
                 value={keyDraft}
@@ -233,43 +234,42 @@ export default function Settings() {
                 className={inputCls}
               />
             </Field>
-            <p className="text-[0.75rem] leading-relaxed text-ink-faint">
+            <p className="text-caption leading-relaxed text-ink-faint">
               到 themoviedb.org 注册后在「Settings → API」免费申请。留空则自动回退到内置 Key。
             </p>
           </div>
         )}
+      </Group>
+
+      {/* TMDB 接口 */}
+      <Group title="TMDB" index={2}>
         {/* 接口节点测速 */}
-        <div className="mb-3 rounded-xl border border-paper-line bg-paper/60 p-3">
-          <div className="flex items-center justify-between gap-2">
+        <div className="mb-2 mt-2 rounded-xl border border-paper-line bg-paper-sunken p-3">
+          <div className="flex items-center justify-between gap-3">
             <div className="min-w-0">
-              <div className="text-[0.8125rem] font-medium">连接诊断</div>
-              <div className="mt-0.5 truncate font-mono text-[0.6875rem] text-ink-faint">
+              <div className="text-body-sm font-medium text-ink">连接诊断</div>
+              <div className="mt-0.5 truncate font-mono text-micro text-ink-faint">
                 {settings.apiBase}
               </div>
             </div>
-            <Button
-              variant="outline"
-              className="shrink-0 px-2.5 py-1.5 text-[0.75rem]"
-              onClick={() => void runProbe()}
-              disabled={probing}
-            >
+            <Button variant="tonal" className="shrink-0" onClick={() => void runProbe()} disabled={probing}>
               {probing ? '诊断中…' : '诊断并择优'}
             </Button>
           </div>
 
           {diag && (
-            <div className="mt-2.5 space-y-1 text-[0.75rem]">
+            <div className="mt-2.5 space-y-1.5 rounded-xl bg-paper-card px-3 py-2.5 text-caption">
               <div className="flex items-center justify-between gap-2">
-                <span className="text-ink-soft">
+                <span className="min-w-0 text-ink-soft">
                   API Key（{diag.usingBuiltIn ? '内置' : '自定义'}）
                 </span>
-                <span className={clsx(diag.key.ok ? 'text-moss' : 'text-reel')}>
+                <span className={clsx('shrink-0', diag.key.ok ? 'text-moss' : 'text-danger')}>
                   {diag.key.ok ? '有效' : diag.key.note}
                 </span>
               </div>
               {diag.images.map((i) => (
                 <div key={i.base} className="flex items-center justify-between gap-2">
-                  <span className="truncate font-mono text-[0.6875rem] text-ink-faint">
+                  <span className="truncate font-mono text-micro text-ink-faint">
                     {i.base.replace('https://', '')}
                   </span>
                   <span className={clsx('shrink-0', i.ok ? 'text-moss' : 'text-ink-faint')}>
@@ -281,7 +281,7 @@ export default function Settings() {
           )}
 
           {probes && (
-            <div className="mt-2.5 space-y-1">
+            <div className="mt-2.5 space-y-1.5">
               {probes.map((p) => {
                 const active = p.base === settings.apiBase
                 return (
@@ -297,10 +297,10 @@ export default function Settings() {
                       })
                     }}
                     className={clsx(
-                      'flex w-full items-center justify-between gap-2 rounded-lg border px-2.5 py-1.5 text-left text-[0.75rem]',
+                      'pressable flex min-h-touch w-full items-center justify-between gap-2 rounded-xl border px-3 text-left text-caption',
                       active
-                        ? 'border-reel/40 bg-reel-soft/60 text-reel-dark'
-                        : 'border-paper-line bg-white',
+                        ? 'border-reel/40 bg-reel-soft text-reel-dark'
+                        : 'border-paper-line bg-paper-card text-ink',
                       !p.ok && 'opacity-60'
                     )}
                   >
@@ -317,7 +317,7 @@ export default function Settings() {
             </div>
           )}
 
-          <p className="mt-2 text-[0.6875rem] leading-relaxed text-ink-faint">
+          <p className="mt-2.5 text-micro leading-relaxed text-ink-faint">
             大陆网络常屏蔽 themoviedb.org，默认已改用官方短域名。仍不通就点「测速并择优」；
             若全部不可达，可在下方填自建反代地址（仓库 <span className="font-mono">workers/</span> 里有现成脚本）。
           </p>
@@ -332,12 +332,17 @@ export default function Settings() {
 
         <button
           onClick={() => setAdvanced((v) => !v)}
-          className="mb-2 mt-1 text-[0.75rem] text-ink-soft underline decoration-paper-line"
+          className="pressable flex min-h-touch w-full items-center gap-1.5 border-b border-paper-line text-caption text-ink-soft"
         >
+          <Icon
+            name="chevronRight"
+            size={13}
+            className={clsx('transition-transform ease-spring duration-2', advanced && 'rotate-90')}
+          />
           {advanced ? '收起高级选项' : '自建反代 / 手动指定地址'}
         </button>
         {advanced && (
-          <div className="space-y-3 border-t border-paper-line pt-3">
+          <div className="space-y-3 border-b border-paper-line py-3">
             <Field label="API 地址">
               <input value={apiBaseDraft} onChange={(e) => setApiBaseDraft(e.target.value)} onBlur={() => settings.set({ apiBase: apiBaseDraft.trim() })} className={inputCls} />
             </Field>
@@ -373,7 +378,7 @@ export default function Settings() {
       </Group>
 
       {/* 番号刮削 */}
-      <Group title="番号刮削">
+      <Group title="番号刮削" index={3}>
         <ToggleRow
           label="启用番号刮削"
           desc="在隐私空间添加影片时，输入番号自动带出标题、封面、演员、片商。"
@@ -382,9 +387,9 @@ export default function Settings() {
         />
 
         {settings.javEnabled && (
-          <div className="mt-3 space-y-3 border-t border-paper-line pt-3">
+          <div className="mt-1 space-y-4 border-t border-paper-line pt-3">
             <div>
-              <div className="mb-1.5 text-[0.75rem] font-medium text-ink-faint">刮削后端</div>
+              <div className="mb-2 text-label font-semibold text-ink-faint">刮削后端</div>
               <Segmented
                 value={settings.javBackend}
                 onChange={(v) => settings.set({ javBackend: v as 'proxy' | 'metatube' })}
@@ -393,7 +398,7 @@ export default function Settings() {
                   { value: 'metatube', label: 'MetaTube' }
                 ]}
               />
-              <p className="mt-1 text-[0.75rem] leading-relaxed text-ink-faint">
+              <p className="mt-2 text-caption leading-relaxed text-ink-faint">
                 {settings.javBackend === 'proxy'
                   ? '内置 javdb / jav321 / dmm / avsox / mgstage / fc2 六源，逐个尝试、互相补位。'
                   : 'MetaTube 自带 20+ 家 provider，无码和小众片商命中率更高，需要你自己跑一个服务。'}
@@ -426,10 +431,10 @@ export default function Settings() {
 
             {settings.javBackend === 'proxy' ? (
               <div>
-                <div className="mb-1.5 text-[0.75rem] font-medium text-ink-faint">
+                <div className="mb-2 text-label font-semibold text-ink-faint">
                   数据源（按优先级，至少留一个）
                 </div>
-                <div className="flex flex-wrap gap-1.5">
+                <div className="flex flex-wrap gap-2">
                   {JAV_SOURCES.map((s) => {
                     const on = settings.javSources.includes(s.id)
                     return (
@@ -438,10 +443,10 @@ export default function Settings() {
                         onClick={() => toggleJavSource(s.id)}
                         title={s.note}
                         className={clsx(
-                          'rounded-full border px-2.5 py-1 text-[0.75rem] transition-colors',
+                          'pressable flex min-h-touch items-center rounded-full border px-3.5 text-label',
                           on
-                            ? 'border-reel/40 bg-reel-soft/60 text-reel-dark'
-                            : 'border-paper-line bg-white text-ink-faint'
+                            ? 'border-reel/40 bg-reel-soft text-reel-dark'
+                            : 'border-paper-line bg-paper-card text-ink-faint'
                         )}
                       >
                         {s.label}
@@ -450,7 +455,7 @@ export default function Settings() {
                     )
                   })}
                 </div>
-                <p className="mt-1 text-[0.75rem] text-ink-faint">
+                <p className="mt-2 text-caption leading-relaxed text-ink-faint">
                   标「境外」的站需要你的服务部署在境外；境内节点建议只留 JavDB 与 Jav321。
                 </p>
               </div>
@@ -466,21 +471,23 @@ export default function Settings() {
               </Field>
             )}
 
-            <ToggleRow
-              label="补全简介"
-              desc="JavDB 自身没有简介，开启后会再问 DMM 等站补齐（需要节点能出网）。"
-              value={settings.javEnrich}
-              onChange={(v) => settings.set({ javEnrich: v })}
-            />
-            <ToggleRow
-              label="封面下载后存本地"
-              desc="经代理下载并存入本地库，离线可看；关掉则只记住远程地址。"
-              value={settings.javImageProxy}
-              onChange={(v) => settings.set({ javImageProxy: v })}
-            />
+            <div className="space-y-0.5">
+              <ToggleRow
+                label="补全简介"
+                desc="JavDB 自身没有简介，开启后会再问 DMM 等站补齐（需要节点能出网）。"
+                value={settings.javEnrich}
+                onChange={(v) => settings.set({ javEnrich: v })}
+              />
+              <ToggleRow
+                label="封面下载后存本地"
+                desc="经代理下载并存入本地库，离线可看；关掉则只记住远程地址。"
+                value={settings.javImageProxy}
+                onChange={(v) => settings.set({ javImageProxy: v })}
+              />
+            </div>
 
             <div>
-              <div className="mb-1.5 text-[0.75rem] font-medium text-ink-faint">标题语言</div>
+              <div className="mb-2 text-label font-semibold text-ink-faint">标题语言</div>
               <Segmented
                 value={settings.javTitleLang}
                 onChange={(v) =>
@@ -503,16 +510,16 @@ export default function Settings() {
             </Button>
 
             {javTest && (
-              <div className="rounded-xl border border-paper-line bg-paper/60 p-3 text-[0.75rem]">
-                <div className={clsx('font-medium', javTest.ok ? 'text-moss' : 'text-reel')}>
+              <div className="rounded-xl border border-paper-line bg-paper-sunken p-3 text-caption">
+                <div className={clsx('font-medium', javTest.ok ? 'text-moss' : 'text-danger')}>
                   {javTest.ok ? `可用（${javTest.ms}ms）` : `不可用：${javTest.message}`}
                 </div>
                 {javTest.providers.length > 0 && (
-                  <div className="mt-1.5 flex flex-wrap gap-1">
+                  <div className="mt-2 flex flex-wrap gap-1.5">
                     {javTest.providers.map((p) => (
                       <span
                         key={p}
-                        className="rounded-md bg-white px-1.5 py-0.5 font-mono text-[0.6875rem] text-ink-soft"
+                        className="rounded-lg bg-paper-card px-2 py-1 font-mono text-micro text-ink-soft"
                       >
                         {p}
                       </span>
@@ -522,10 +529,10 @@ export default function Settings() {
               </div>
             )}
 
-            <div className="rounded-xl border border-reel/25 bg-reel-soft/60 p-3 text-[0.75rem] leading-relaxed text-ink-soft">
-              <div className="mb-1 font-medium text-reel-dark">使用前必读</div>
+            <div className="rounded-xl border border-reel/25 bg-reel-soft p-3 text-caption leading-relaxed text-ink-soft">
+              <div className="mb-1 text-label font-semibold text-reel-dark">使用前必读</div>
               浏览器有跨域限制，抓不了这些站点，所以抓取发生在你<strong>自己部署的服务</strong>里：
-              <div className="mt-1.5 font-mono text-[0.6875rem]">
+              <div className="mt-1.5 font-mono text-micro">
                 node workers/jav-proxy.mjs
                 <br />
                 # 或 Cloudflare Worker：cd workers && npx wrangler deploy --config
@@ -544,8 +551,8 @@ export default function Settings() {
       <AppearancePanel />
 
       {/* 备份 */}
-      <Group title="备份与导出">
-        <div className="space-y-2">
+      <Group title="备份与导出" index={5}>
+        <div className="space-y-2.5 py-2">
           <Button variant="outline" className="w-full" onClick={() => setExportSheet(true)}>
             <Icon name="download" size={16} /> 导出 JSON 备份
           </Button>
@@ -570,21 +577,23 @@ export default function Settings() {
             <Icon name="upload" size={16} /> 导入备份文件
           </Button>
         </div>
-        <p className="mt-2 text-[0.75rem] leading-relaxed text-ink-faint">
+        <p className="pb-2 pt-1 text-caption leading-relaxed text-ink-faint">
           备份是单个 JSON 文件，封面可内嵌；隐私区可选「不导出」或「AES 加密后导出」。
         </p>
       </Group>
 
       {/* 隐私保险箱 */}
       {!vaultSession.configured && (
-        <Group title="隐私">
-          <div className="rounded-xl border border-paper-line bg-paper p-3">
-            <div className="flex items-start gap-2">
-              <Icon name="lock" size={16} className="mt-0.5 text-ink-soft" />
-              <div className="text-[0.8125rem] leading-relaxed text-ink-soft">
+        <Group title="隐私" index={6}>
+          <div className="my-2 rounded-xl bg-paper-sunken p-3.5">
+            <div className="flex items-start gap-2.5">
+              <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-paper-card text-reel-dark shadow-e1">
+                <Icon name="lock" size={16} />
+              </span>
+              <p className="text-caption leading-relaxed text-ink-soft">
                 创建一个带 PIN 码的隐私空间，用于存放不想出现在主片库的收藏。它的内容是独立存储的，不会出现
                 在片库、搜索结果、统计数据或常规导出中。
-              </div>
+              </p>
             </div>
             <Button className="mt-3 w-full" onClick={() => navigate('/vault')}>
               创建隐私空间
@@ -594,12 +603,16 @@ export default function Settings() {
       )}
 
       {vaultSession.active && (
-        <Group title="隐私空间">
-          <div className="space-y-2">
+        <Group title="隐私空间" index={7}>
+          <div className="space-y-2.5 py-2">
             <Button variant="outline" className="w-full" onClick={() => navigate('/vault')}>
               <Icon name="lock" size={16} /> 打开隐私保险箱
             </Button>
-            <Button variant="ghost" className="w-full" onClick={() => setConfirmClearVault(true)}>
+            <Button
+              variant="ghost"
+              className="w-full text-danger"
+              onClick={() => setConfirmClearVault(true)}
+            >
               清空隐私空间全部数据
             </Button>
           </div>
@@ -607,34 +620,42 @@ export default function Settings() {
       )}
 
       {/* 危险操作 */}
-      <Group title="数据维护">
-        <Button variant="ghost" className="w-full text-reel" onClick={() => setConfirmClearLib(true)}>
-          清空公开片库（{library.length} 条）
-        </Button>
+      <Group title="数据维护" index={8} tone="danger">
+        <div className="py-2">
+          <Button variant="danger" className="w-full" onClick={() => setConfirmClearLib(true)}>
+            <Icon name="trash" size={16} /> 清空公开片库（{library.length} 条）
+          </Button>
+        </div>
       </Group>
 
-      <div className="mt-6 text-center">
-        <p className="mx-auto max-w-[320px] text-[0.7188rem] leading-relaxed text-ink-faint">
+      <div className="mt-8">
+        <div className="h-px w-full bg-paper-line" />
+        <p className="mx-auto mt-6 max-w-[320px] text-center text-micro leading-relaxed text-ink-faint">
           装到手机：iPhone 用 Safari 打开后点「分享 → 添加到主屏幕」，Android 用 Chrome 菜单里的「安装应用」。
         </p>
-        <button onClick={onVersionTap} className="mt-3 text-[0.6875rem] text-ink-faint/70">
-          影匣 ReelVault v{APP_VERSION}
-        </button>
+        <div className="mt-4 flex justify-center">
+          <button
+            onClick={onVersionTap}
+            className="pressable min-h-touch rounded-xl px-4 text-caption text-ink-faint/80"
+          >
+            影匣 ReelVault v{APP_VERSION}
+          </button>
+        </div>
 
-        <div className="mt-4 flex items-center justify-center gap-3">
+        <div className="mt-2 flex items-center justify-center gap-2">
           <button
             onClick={() => window.open(RELEASES_URL, '_blank', 'noopener,noreferrer')}
-            className="flex items-center gap-1.5 rounded-full border border-paper-line bg-white px-3 py-1.5 text-[0.75rem] text-ink-soft active:bg-paper"
+            className="pressable flex min-h-touch items-center gap-2 rounded-full border border-paper-line bg-paper-card px-4 text-label text-ink-soft hover:border-paper-lineStrong hover:text-ink"
             title="打开 GitHub 仓库"
           >
-            <Icon name="github" size={15} /> GitHub
+            <Icon name="github" size={16} /> GitHub
           </button>
           <a
             href={AUTHOR_MAIL}
-            className="flex items-center gap-1.5 rounded-full border border-paper-line bg-white px-3 py-1.5 text-[0.75rem] text-ink-soft active:bg-paper"
+            className="pressable flex min-h-touch items-center gap-2 rounded-full border border-paper-line bg-paper-card px-4 text-label text-ink-soft hover:border-paper-lineStrong hover:text-ink"
             title="给作者发邮件"
           >
-            <Icon name="mail" size={15} /> by 赵大阳
+            <Icon name="mail" size={16} /> by 赵大阳
           </a>
         </div>
       </div>
@@ -657,7 +678,7 @@ export default function Settings() {
           onChange={setExportPosters}
         />
         <div className="mt-4">
-          <div className="mb-1.5 text-[0.75rem] font-medium text-ink-faint">隐私区如何处理</div>
+          <div className="mb-2 text-label font-semibold text-ink-faint">隐私区如何处理</div>
           <Segmented
             value={vaultMode}
             onChange={(v) => setVaultMode(v as VaultMode)}
@@ -679,11 +700,11 @@ export default function Settings() {
                   className={inputCls}
                 />
               </Field>
-              <p className="text-[0.75rem] text-ink-faint">恢复时需要输入同一个 PIN 才能解开隐私区。</p>
+              <p className="text-caption leading-relaxed text-ink-faint">恢复时需要输入同一个 PIN 才能解开隐私区。</p>
             </div>
           )}
           {vaultMode === 'plain' && (
-            <p className="mt-2 text-[0.75rem] text-reel-dark">
+            <p className="mt-2 text-caption leading-relaxed text-danger">
               明文导出后任何拿到文件的人都能看到隐私区内容，请谨慎保存。
             </p>
           )}
@@ -718,7 +739,7 @@ export default function Settings() {
             className={inputCls}
           />
         </Field>
-        <p className="text-[0.75rem] text-ink-faint">公开片库已经导入成功，这里只用于解开隐私区。</p>
+        <p className="text-caption leading-relaxed text-ink-faint">公开片库已经导入成功，这里只用于解开隐私区。</p>
       </Sheet>
 
       <Confirm
@@ -754,11 +775,36 @@ export default function Settings() {
   )
 }
 
-function Group({ title, children }: { title: string; children: React.ReactNode }) {
+function Group({
+  title,
+  children,
+  index = 0,
+  tone
+}: {
+  title: string
+  children: React.ReactNode
+  index?: number
+  tone?: 'danger'
+}) {
   return (
-    <section className="mt-5 rounded-2xl border border-paper-line bg-white p-4">
-      <h2 className="mb-3 text-[0.75rem] font-medium uppercase tracking-wide text-ink-faint">{title}</h2>
-      {children}
+    <section
+      className={clsx(
+        'animate-staggerIn mb-4 overflow-hidden rounded-2xl border bg-paper-card shadow-e1',
+        tone === 'danger' ? 'border-danger/30' : 'border-paper-line'
+      )}
+      style={{ animationDelay: `${Math.min(index, 10) * 28}ms` }}
+    >
+      <div className="border-b border-paper-line px-4 py-3">
+        <h2
+          className={clsx(
+            'text-label font-semibold',
+            tone === 'danger' ? 'text-danger' : 'text-ink-faint'
+          )}
+        >
+          {title}
+        </h2>
+      </div>
+      <div className="px-4 py-2">{children}</div>
     </section>
   )
 }
@@ -775,25 +821,33 @@ function ToggleRow({
   onChange: (v: boolean) => void
 }) {
   return (
-    <div className="flex items-start justify-between gap-3 py-1.5">
-      <div className="min-w-0">
-        <div className="text-[0.875rem]">{label}</div>
-        {desc && <div className="mt-0.5 text-[0.75rem] leading-relaxed text-ink-faint">{desc}</div>}
-      </div>
-      <button
-        onClick={() => onChange(!value)}
+    <button
+      type="button"
+      onClick={() => onChange(!value)}
+      aria-pressed={value}
+      className="pressable flex min-h-touch w-full items-center justify-between gap-4 border-b border-paper-line py-3 text-left last:border-b-0"
+    >
+      <span className="min-w-0 flex-1">
+        <span className="block text-body-sm font-medium text-ink">{label}</span>
+        {desc && (
+          <span className="mt-0.5 block text-caption leading-relaxed text-ink-faint">{desc}</span>
+        )}
+      </span>
+      <span
+        aria-hidden
         className={clsx(
-          'mt-0.5 h-6 w-11 shrink-0 rounded-full p-0.5 transition-colors',
-          value ? 'bg-moss' : 'bg-paper-line'
+          'flex h-7 w-12 shrink-0 items-center rounded-full border transition-colors ease-spring duration-2',
+          value ? 'border-reel bg-reel' : 'border-paper-lineStrong bg-paper-sunken'
         )}
       >
         <span
           className={clsx(
-            'block h-5 w-5 rounded-full bg-white shadow transition-transform',
+            'ml-0.5 block h-5 w-5 rounded-full bg-paper-card shadow-e1 ring-1 ring-ink/10',
+            'transition-transform ease-spring duration-2',
             value && 'translate-x-5'
           )}
         />
-      </button>
-    </div>
+      </span>
+    </button>
   )
 }

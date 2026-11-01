@@ -226,11 +226,27 @@ Android 只有同时满足下面三点，才允许直接覆盖安装（不用先
 密钥一旦丢失就无法再升级（只能卸载重装并丢失本地数据），务必备份好 `reelvault.jks`。
 构建日志的 Job Summary 会打印本次签名来源与 SHA256 指纹，可用于核对是否一致。
 
-## 已知平台边界
+## 目录速览
 
 - **保险箱 PIN** 依赖 WebCrypto，必须在安全上下文（`https://` 或 `localhost`）下运行。Capacitor 默认以 `https://localhost` 提供服务，APK 内可正常使用。
 - **检查更新**会访问 `api.github.com`（连不上时自动试公开镜像）。若全部不通，界面仍会列出三个下载渠道，可直接手动前往。
 - 手机上需允许「未知来源」才能安装本 APK。配置了固定签名密钥后新旧版本可直接覆盖安装，详见上文「签名与覆盖安装」。
+
+## 设计系统
+
+视觉 token 集中在两处：`src/index.css` 定义变量，`tailwind.config.js` 把它们映射成类名。
+
+| 维度 | 用法 |
+| --- | --- |
+| 色彩 | `ink / ink-soft / ink-faint`（文字三级）、`paper / paper-card / paper-sunken`（表面三级）、`paper-line`（描边）、`reel / reel-dark / reel-soft`（强调）、`moss / clay / danger`（语义） |
+| 排版 | `text-page / display / headline / title / subtitle / body / body-sm / label / caption / micro`，全部 rem，随「字号」设置整体缩放 |
+| 形状 | `rounded-lg / xl / 2xl`，跟随「圆角」设置；标题字体用 `font-display`（中文衬线） |
+| 层级 | `shadow-e1 / e2 / e3 / lift / pop` |
+| 动效 | `animate-fadeIn / slideUp / popIn / staggerIn / shake`，缓动 `ease-spring / ease-standard` |
+
+约定：正文与次级文字在四种主题下均达 WCAG AA（≥4.5:1）；**不要**再写 `bg-white`、`text-white`、裸的 `text-[0.8125rem]` 或自定义阴影 —— 深色模式下会露白，请走上面的 token。
+
+「设置 → 外观」可切换：4 种底色（米纸 / 胶片 / 影院 / 熄灯）、7 种强调色、圆角、字号、动效强度、密度与宫格列数。
 
 ## 目录速览
 

@@ -12,7 +12,17 @@ import { blankTitle } from '../lib/addTitle'
 import type { MediaKind, TitleItem, WatchStatus } from '../types'
 import { STATUS_LABEL, STATUS_ORDER, newId } from '../types'
 import Icon from '../components/Icon'
-import { Button, Chip, Field, Segmented, Stars, inputCls } from '../components/ui'
+import {
+  Button,
+  Chip,
+  Field,
+  Section,
+  Segmented,
+  Skeleton,
+  Stars,
+  inputCls,
+  textareaCls
+} from '../components/ui'
 import { toast } from '../components/Toast'
 
 export default function AddItem() {
@@ -59,8 +69,13 @@ export default function AddItem() {
 
   if (zone === 'vault' && !vaultSession.active) {
     return (
-      <div className="mx-auto max-w-[560px] px-4 pt-10 text-center text-[0.875rem] text-ink-faint">
-        无法访问该页面
+      <div className="mx-auto max-w-[560px] px-4 pt-safe">
+        <div className="mt-10 rounded-2xl border border-paper-line bg-paper-card p-8 text-center shadow-e1">
+          <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-paper-sunken text-ink-faint">
+            <Icon name="lock" size={24} />
+          </div>
+          <p className="text-body text-ink-soft">无法访问该页面</p>
+        </div>
       </div>
     )
   }
@@ -172,24 +187,34 @@ export default function AddItem() {
 
   if (!loaded) {
     return (
-      <div className="mx-auto max-w-[560px] space-y-2 px-4 pt-6">
-        <div className="skeleton h-8 w-32 rounded" />
-        <div className="skeleton h-40 rounded-2xl" />
+      <div className="mx-auto max-w-[560px] px-4 pt-safe">
+        <div className="pt-6">
+          <Skeleton className="h-9 w-40 rounded-lg" />
+          <Skeleton className="mt-4 h-44 w-full rounded-2xl" />
+          <Skeleton className="mt-4 h-11 w-full rounded-xl" />
+        </div>
       </div>
     )
   }
 
   return (
     <div className="mx-auto max-w-[560px] px-4 pb-10 pt-safe">
-      <div className="flex items-center justify-between py-3">
-        <button onClick={() => navigate(-1)} className="flex items-center gap-1 text-ink-soft">
-          <Icon name="chevronLeft" size={20} /> <span className="text-[0.8125rem]">返回</span>
+      {/* ---------------------------------------------------------- 页头 */}
+      <header className="flex items-center gap-2 pb-5 pt-3">
+        <button
+          onClick={() => navigate(-1)}
+          className="-ml-2 inline-flex h-11 min-w-touch items-center gap-1 rounded-xl px-2 text-label font-medium text-ink-soft transition ease-standard duration-2 hover:bg-paper-sunken hover:text-ink active:scale-[0.97]"
+        >
+          <Icon name="chevronLeft" size={18} />
+          返回
         </button>
-        <h1 className="text-[0.9375rem] font-semibold">{editing ? '编辑影片' : '手动添加'}</h1>
-        <span className="w-12" />
-      </div>
+        <h1 className="min-w-0 flex-1 truncate font-display text-page font-semibold tracking-tight text-ink">
+          {editing ? '编辑影片' : '手动添加'}
+        </h1>
+      </header>
 
-      <div className="mb-4">
+      {/* ------------------------------------------------------ 类型切换 */}
+      <div className="mb-5">
         <Segmented
           value={kind}
           onChange={(v) => {
@@ -205,208 +230,269 @@ export default function AddItem() {
         />
       </div>
 
+      {/* ---------------------------------------------------- 番号刮削 */}
       {settings.javEnabled && (
-        <div className="mb-4 rounded-xl border border-reel/25 bg-reel-soft/60 p-3">
-          <div className="mb-2 flex items-center gap-1.5 text-[0.8125rem] font-medium text-reel-dark">
-            <Icon name="search" size={14} /> 按番号自动填充
-          </div>
-          <div className="flex gap-2">
-            <input
-              value={javCode}
-              onChange={(e) => setJavCode(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') void runScrape()
-              }}
-              placeholder="如 SSNI-589"
-              className={inputCls + ' flex-1 text-[0.8125rem]'}
-            />
-            <Button className="shrink-0" disabled={javBusy} onClick={() => void runScrape()}>
-              {javBusy ? '刮削中…' : '刮削'}
-            </Button>
-          </div>
-          <p className="mt-1.5 text-[0.6875rem] leading-relaxed text-ink-faint">
-            番号会发往你在「设置 → 番号刮削」里填的服务地址，也可以直接粘贴文件名（会自动抠番号）。
-            {settings.javEndpoint ? '' : '还没填地址，先去设置里配一个。'}
-          </p>
+        <section className="mb-5">
+          <div className="overflow-hidden rounded-2xl border border-paper-line bg-paper-card shadow-e1">
+            <div className="flex items-center gap-2 px-4 pb-2 pt-3.5 text-label font-semibold text-reel-dark">
+              <Icon name="search" size={15} />
+              按番号自动填充
+            </div>
 
-          {javResult && (
-            <div className="mt-3 rounded-xl border border-white bg-white p-3">
-              <div className="flex gap-3">
-                {javResult.cover ? (
-                  <img
-                    src={javImageUrl(javSettings, javResult.cover)}
-                    alt=""
-                    className="h-[112px] w-[78px] shrink-0 rounded-lg object-cover"
-                  />
-                ) : (
-                  <div className="h-[112px] w-[78px] shrink-0 rounded-lg bg-paper-line" />
-                )}
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-[0.875rem] font-medium">
-                    {javResult.title || javResult.code}
-                  </div>
-                  <div className="font-mono text-[0.6875rem] text-ink-faint">{javResult.code}</div>
-                  <div className="mt-1 text-[0.75rem] text-ink-soft">
-                    {[
-                      javResult.releaseDate,
-                      javResult.runtime ? `${javResult.runtime} 分钟` : '',
-                      javResult.maker,
-                      javResult.score ? `评分 ${javResult.score}` : ''
-                    ]
-                      .filter(Boolean)
-                      .join(' · ')}
-                  </div>
-                  {javResult.overview && (
-                    <p className="mt-1 line-clamp-3 text-[0.6875rem] leading-relaxed text-ink-faint">
-                      {javResult.overview}
-                    </p>
-                  )}
-                </div>
+            <div className="px-4 pb-4">
+              <div className="flex gap-2">
+                <input
+                  value={javCode}
+                  onChange={(e) => setJavCode(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') void runScrape()
+                  }}
+                  placeholder="如 SSNI-589"
+                  className={clsx(inputCls, 'text-body-sm')}
+                />
+                <Button className="shrink-0" disabled={javBusy} onClick={() => void runScrape()}>
+                  {javBusy ? '刮削中…' : '刮削'}
+                </Button>
               </div>
+              <p className="mt-2 text-caption leading-relaxed text-ink-faint">
+                番号会发往你在「设置 → 番号刮削」里填的服务地址，也可以直接粘贴文件名（会自动抠番号）。
+                {settings.javEndpoint ? '' : '还没填地址，先去设置里配一个。'}
+              </p>
 
-              {javResult.actors.length > 0 && (
-                <div className="mt-2 flex flex-wrap gap-1">
-                  {javResult.actors.map((a) => (
-                    <span
-                      key={a}
-                      className="rounded-md bg-reel-soft/60 px-1.5 py-0.5 text-[0.6875rem] text-reel-dark"
-                    >
-                      {a}
+              {javResult && (
+                <div className="animate-slideUp mt-3 rounded-xl bg-reel-soft p-3">
+                  <div className="flex gap-3">
+                    {javResult.cover ? (
+                      <img
+                        src={javImageUrl(javSettings, javResult.cover)}
+                        alt=""
+                        className="h-[112px] w-[78px] shrink-0 rounded-lg bg-paper-sunken object-cover shadow-e1"
+                      />
+                    ) : (
+                      <div className="flex h-[112px] w-[78px] shrink-0 items-center justify-center rounded-lg bg-paper-sunken text-ink-faint">
+                        <Icon name="image" size={22} />
+                      </div>
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-body-sm font-semibold text-ink">
+                        {javResult.title || javResult.code}
+                      </div>
+                      <div className="font-mono text-micro text-ink-faint">{javResult.code}</div>
+                      <div className="mt-1 text-caption text-ink-soft">
+                        {[
+                          javResult.releaseDate,
+                          javResult.runtime ? `${javResult.runtime} 分钟` : '',
+                          javResult.maker,
+                          javResult.score ? `评分 ${javResult.score}` : ''
+                        ]
+                          .filter(Boolean)
+                          .join(' · ')}
+                      </div>
+                      {javResult.overview && (
+                        <p className="mt-1 line-clamp-3 text-caption leading-relaxed text-ink-faint">
+                          {javResult.overview}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  {javResult.actors.length > 0 && (
+                    <div className="mt-2.5 flex flex-wrap gap-1.5">
+                      {javResult.actors.map((a) => (
+                        <span
+                          key={a}
+                          className="rounded-full bg-paper-card px-2 py-0.5 text-micro text-reel-dark shadow-e1"
+                        >
+                          {a}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="mt-2.5 flex flex-wrap items-center gap-1.5 text-micro">
+                    {(javResult.sources ?? []).map((s) => (
+                      <span
+                        key={s.id}
+                        title={s.note ?? ''}
+                        className={clsx('font-mono', s.ok ? 'text-moss' : 'text-ink-faint')}
+                      >
+                        {s.id} {s.ok ? '✓' : '✕'}
+                      </span>
+                    ))}
+                    <span className="ml-auto font-mono text-ink-faint">
+                      {javResult.provider} · {javResult.elapsed ?? 0}ms
+                      {javResult.cached ? ' · 缓存' : ''}
                     </span>
-                  ))}
+                  </div>
                 </div>
               )}
-
-              <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[0.625rem]">
-                {(javResult.sources ?? []).map((s) => (
-                  <span
-                    key={s.id}
-                    title={s.note ?? ''}
-                    className={clsx('font-mono', s.ok ? 'text-moss' : 'text-ink-faint')}
-                  >
-                    {s.id} {s.ok ? '✓' : '✕'}
-                  </span>
-                ))}
-                <span className="ml-auto font-mono text-ink-faint">
-                  {javResult.provider} · {javResult.elapsed ?? 0}ms
-                  {javResult.cached ? ' · 缓存' : ''}
-                </span>
-              </div>
             </div>
-          )}
-        </div>
+          </div>
+        </section>
       )}
 
-      {/* 封面 */}
-      <div className="mb-5 flex gap-3">
-        <div
-          className={clsx(
-            'flex h-[132px] w-[92px] shrink-0 items-center justify-center overflow-hidden rounded-xl bg-paper-line/70',
-            !posterPreview && 'border border-dashed border-paper-line'
-          )}
-        >
-          {posterPreview ? (
-            <img src={posterPreview} alt="" className="h-full w-full object-cover" />
-          ) : (
-            <Icon name="image" size={26} className="text-ink-faint" />
-          )}
-        </div>
-        <div className="flex-1 space-y-2">
-          <Button variant="outline" size="sm" className="w-full" onClick={() => void onPick()}>
-            <Icon name="upload" size={15} /> {posterPreview ? '更换封面文件' : '上传封面'}
-          </Button>
+      {/* -------------------------------------------------- 核心：名称 */}
+      <Section title="基本信息" className="mb-5">
+        <Field label="片名">
+          <input value={draft.title} onChange={(e) => set('title', e.target.value)} placeholder="必填" className={inputCls} />
+        </Field>
+        <Field label="原名">
           <input
-            value={remoteUrl}
-            onChange={(e) => setRemoteUrl(e.target.value)}
-            placeholder="或粘贴封面图片网址"
-            className={inputCls + ' text-[0.8125rem]'}
+            value={draft.originalTitle ?? ''}
+            onChange={(e) => set('originalTitle', e.target.value)}
+            placeholder="可选"
+            className={inputCls}
           />
-          <p className="text-[0.6875rem] leading-relaxed text-ink-faint">
-            留空则生成文字占位封面。图片会压缩后存入本地库。
-          </p>
-        </div>
-      </div>
+        </Field>
+      </Section>
 
-      <Field label="片名">
-        <input value={draft.title} onChange={(e) => set('title', e.target.value)} placeholder="必填" className={inputCls} />
-      </Field>
-      <Field label="原名">
-        <input
-          value={draft.originalTitle ?? ''}
-          onChange={(e) => set('originalTitle', e.target.value)}
-          placeholder="可选"
-          className={inputCls}
-        />
-      </Field>
-      <div className="flex gap-3">
-        <div className="flex-1">
-          <Field label="年份">
-            <input value={draft.year ?? ''} onChange={(e) => set('year', e.target.value)} inputMode="numeric" className={inputCls} />
-          </Field>
+      {/* ------------------------------------------------------ 影片信息 */}
+      <Section title="影片信息" className="mb-5">
+        <div className="flex gap-3">
+          <div className="flex-1">
+            <Field label="年份">
+              <input value={draft.year ?? ''} onChange={(e) => set('year', e.target.value)} inputMode="numeric" className={inputCls} />
+            </Field>
+          </div>
+          <div className="flex-1">
+            <Field label={kind === 'movie' ? '片长（分钟）' : '单集时长（分钟）'}>
+              <input
+                value={String(draft.runtime ?? '')}
+                onChange={(e) => set('runtime', Number(e.target.value.replace(/\D/g, '')) || undefined)}
+                inputMode="numeric"
+                className={inputCls}
+              />
+            </Field>
+          </div>
         </div>
-        <div className="flex-1">
-          <Field label={kind === 'movie' ? '片长（分钟）' : '单集时长（分钟）'}>
+        <Field label="导演 / 主创">
+          <input value={draft.director ?? ''} onChange={(e) => set('director', e.target.value)} className={inputCls} />
+        </Field>
+        <Field label="主演（顿号分隔）">
+          <input value={castText} onChange={(e) => setCastText(e.target.value)} className={inputCls} />
+        </Field>
+        <Field label="类型（顿号分隔）">
+          <input value={genreText} onChange={(e) => setGenreText(e.target.value)} placeholder="剧情 / 悬疑" className={inputCls} />
+        </Field>
+      </Section>
+
+      {/* ------------------------------------------------ 分类：状态/评分 */}
+      <Section title="分类与评分" className="mb-5">
+        <div className="mb-4">
+          <span className="mb-1.5 block text-label font-medium text-ink-soft">观看状态</span>
+          <div className="flex flex-wrap gap-2">
+            {STATUS_ORDER.map((s: WatchStatus) => (
+              <Chip key={s} active={draft.status === s} onClick={() => set('status', s)}>
+                {STATUS_LABEL[s]}
+              </Chip>
+            ))}
+          </div>
+        </div>
+
+        {draft.status === 'done' && (
+          <Field label="观看日期">
             <input
-              value={String(draft.runtime ?? '')}
-              onChange={(e) => set('runtime', Number(e.target.value.replace(/\D/g, '')) || undefined)}
-              inputMode="numeric"
+              type="date"
+              value={draft.watchedAt?.slice(0, 10) ?? ''}
+              onChange={(e) => set('watchedAt', e.target.value ? `${e.target.value}T12:00:00.000Z` : undefined)}
               className={inputCls}
             />
           </Field>
+        )}
+
+        <div className="mb-4">
+          <span className="mb-1.5 block text-label font-medium text-ink-soft">我的评分</span>
+          <div className="flex min-h-touch items-center gap-3 rounded-xl border border-paper-line bg-paper-sunken px-3.5">
+            <Stars value={draft.rating} onChange={(v) => set('rating', v || undefined)} size={24} />
+            <span className="text-caption text-ink-faint">
+              {draft.rating ? `${(draft.rating / 2).toFixed(1)} 星` : '未评分'}
+            </span>
+          </div>
         </div>
-      </div>
-      <Field label="导演 / 主创">
-        <input value={draft.director ?? ''} onChange={(e) => set('director', e.target.value)} className={inputCls} />
-      </Field>
-      <Field label="主演（顿号分隔）">
-        <input value={castText} onChange={(e) => setCastText(e.target.value)} className={inputCls} />
-      </Field>
-      <Field label="类型（顿号分隔）">
-        <input value={genreText} onChange={(e) => setGenreText(e.target.value)} placeholder="剧情 / 悬疑" className={inputCls} />
-      </Field>
-      <Field label="标签（空格或顿号分隔）">
-        <input value={tagText} onChange={(e) => setTagText(e.target.value)} placeholder="二刷 治愈" className={inputCls} />
-      </Field>
-      <Field label="简介">
+
+        <Field label="标签（空格或顿号分隔）">
+          <input value={tagText} onChange={(e) => setTagText(e.target.value)} placeholder="二刷 治愈" className={inputCls} />
+        </Field>
+      </Section>
+
+      {/* ---------------------------------------------------------- 描述 */}
+      <Section title="简介" className="mb-5">
         <textarea
           value={draft.overview ?? ''}
           onChange={(e) => set('overview', e.target.value)}
           rows={5}
           placeholder="自己写一段简介"
-          className={inputCls}
+          className={textareaCls}
         />
-      </Field>
+      </Section>
 
-      <div className="mb-3">
-        <div className="mb-1.5 text-[0.75rem] font-medium uppercase tracking-wide text-ink-faint">观看状态</div>
-        <div className="flex gap-2">
-          {STATUS_ORDER.map((s: WatchStatus) => (
-            <Chip key={s} active={draft.status === s} onClick={() => set('status', s)}>
-              {STATUS_LABEL[s]}
-            </Chip>
-          ))}
+      {/* ---------------------------------------------------------- 封面 */}
+      <Section title="封面" className="mb-5">
+        <button
+          type="button"
+          onClick={() => void onPick()}
+          className={clsx(
+            'pressable relative block w-full overflow-hidden rounded-2xl border bg-paper-sunken',
+            posterPreview ? 'border-paper-line shadow-e1' : 'border-dashed border-paper-lineStrong'
+          )}
+        >
+          {posterPreview ? (
+            <>
+              <img
+                src={posterPreview}
+                alt=""
+                className="absolute inset-0 h-full w-full scale-125 object-cover opacity-30 blur-2xl"
+              />
+              <img
+                src={posterPreview}
+                alt=""
+                className="relative h-[216px] w-full object-contain px-4 py-4"
+              />
+              <span className="absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-1.5 rounded-full bg-paper-card/92 px-3 py-1.5 text-micro font-medium text-ink-soft shadow-e1 backdrop-blur-sm">
+                <Icon name="upload" size={12} />
+                点击更换封面
+              </span>
+            </>
+          ) : (
+            <div className="flex h-[168px] flex-col items-center justify-center gap-2 px-4">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-paper-card text-ink-faint shadow-e1">
+                <Icon name="image" size={24} />
+              </div>
+              <span className="text-label font-medium text-ink-soft">点击上传封面</span>
+            </div>
+          )}
+        </button>
+
+        <div className="mt-3">
+          <Button variant="outline" size="sm" className="w-full" onClick={() => void onPick()}>
+            <Icon name="upload" size={15} /> {posterPreview ? '更换封面文件' : '上传封面'}
+          </Button>
         </div>
+
+        <div className="mt-3">
+          <Field
+            label="封面图片网址"
+            hint="留空则生成文字占位封面。图片会压缩后存入本地库。"
+          >
+            <input
+              value={remoteUrl}
+              onChange={(e) => setRemoteUrl(e.target.value)}
+              placeholder="或粘贴封面图片网址"
+              className={inputCls}
+            />
+          </Field>
+        </div>
+      </Section>
+
+      {/* ------------------------------------------------------ 底部操作 */}
+      <div className="mt-7 flex items-center gap-3">
+        <Button variant="outline" size="lg" className="px-5" onClick={() => navigate(-1)}>
+          取消
+        </Button>
+        <Button size="lg" className="flex-1" disabled={saving} onClick={() => void save()}>
+          {saving ? '保存中…' : '保存'}
+        </Button>
       </div>
-
-      {draft.status === 'done' && (
-        <Field label="观看日期">
-          <input
-            type="date"
-            value={draft.watchedAt?.slice(0, 10) ?? ''}
-            onChange={(e) => set('watchedAt', e.target.value ? `${e.target.value}T12:00:00.000Z` : undefined)}
-            className={inputCls}
-          />
-        </Field>
-      )}
-
-      <div className="mb-5">
-        <div className="mb-1.5 text-[0.75rem] font-medium uppercase tracking-wide text-ink-faint">我的评分</div>
-        <Stars value={draft.rating} onChange={(v) => set('rating', v || undefined)} />
-      </div>
-
-      <Button className="w-full" size="lg" disabled={saving} onClick={() => void save()}>
-        {saving ? '保存中…' : '保存'}
-      </Button>
     </div>
   )
 }

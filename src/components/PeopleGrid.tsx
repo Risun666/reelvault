@@ -8,7 +8,7 @@ import type { Zone } from '../lib/db'
 import type { Person } from '../types'
 import Avatar from './Avatar'
 import Icon from './Icon'
-import { Button, EmptyState, Field, Sheet, inputCls } from './ui'
+import { Button, EmptyState, Field, IconButton, Sheet, inputCls } from './ui'
 import { toast } from './Toast'
 
 export default function PeopleGrid({ zone }: { zone: Zone }) {
@@ -70,31 +70,25 @@ export default function PeopleGrid({ zone }: { zone: Zone }) {
 
   return (
     <div>
-      <div className="flex items-center gap-2 pb-3">
+      <div className="flex items-center gap-2 pb-4">
         <div className="relative flex-1">
           <Icon
             name="search"
-            size={16}
-            className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-faint"
+            size={17}
+            className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-faint"
           />
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="搜索演员…"
-            className="w-full rounded-xl border border-paper-line bg-white py-2.5 pl-9 pr-3 text-[0.875rem] outline-none placeholder:text-ink-faint/80 focus:border-ink/25"
+            className="h-11 w-full rounded-xl border border-paper-line bg-paper-card pl-10 pr-3 text-body-sm outline-none transition ease-standard duration-2 placeholder:text-ink-faint/85 hover:border-paper-lineStrong focus:border-reel focus:ring-2 focus:ring-reel/15"
           />
         </div>
-        <button
-          onClick={() => setAddOpen(true)}
-          className="rounded-xl border border-paper-line bg-white p-2.5 text-ink-soft"
-          title="手动添加"
-        >
-          <Icon name="plus" size={17} />
-        </button>
+        <IconButton icon="plus" label="手动添加" size={44} onClick={() => setAddOpen(true)} />
       </div>
 
-      <div className="mb-3 flex items-center justify-between gap-2 rounded-xl border border-paper-line bg-paper/60 px-3 py-2">
-        <p className="min-w-0 flex-1 text-[0.6875rem] leading-relaxed text-ink-faint">
+      <div className="mb-5 flex items-center justify-between gap-3 rounded-2xl bg-paper-sunken px-3.5 py-3">
+        <p className="min-w-0 flex-1 text-caption leading-relaxed text-ink-faint">
           {zone === 'vault'
             ? '隐私区的演员与公开区完全隔离，只统计隐私片库的影片。'
             : '可以从片库影片的演员表一键生成，也可以手动添加。'}
@@ -106,7 +100,7 @@ export default function PeopleGrid({ zone }: { zone: Zone }) {
           disabled={busy || titles.length === 0}
           onClick={() => void doGenerate()}
         >
-          <Icon name="refresh" size={14} /> {busy ? '生成中…' : '从片库生成'}
+          <Icon name="refresh" size={15} /> {busy ? '生成中…' : '生成'}
         </Button>
       </div>
 
@@ -116,7 +110,7 @@ export default function PeopleGrid({ zone }: { zone: Zone }) {
           title={items.length === 0 ? '还没有演员' : '没有匹配的演员'}
           desc={
             items.length === 0
-              ? '点「从片库生成」自动整理出已有影片的演员，或手动添加一位。'
+              ? '点「生成」自动整理出已有影片的演员，或手动添加一位。'
               : '换个关键词试试。'
           }
         />
@@ -125,25 +119,28 @@ export default function PeopleGrid({ zone }: { zone: Zone }) {
           className="grid"
           style={{
             gridTemplateColumns: `repeat(${Math.min(theme.columns + 1, 5)}, minmax(0, 1fr))`,
-            gap: gapOf(theme.density)
+            gap: gapOf(theme.density) + 4
           }}
         >
-          {filtered.map((p) => (
+          {filtered.map((p, idx) => (
             <Link
               key={p.id}
               to={`/person/${zone}/${p.id}`}
-              className="flex flex-col items-center text-center"
+              className="animate-staggerIn pressable flex flex-col items-center text-center"
+              style={{ animationDelay: `${Math.min(idx, 10) * 28}ms` }}
             >
-              <Avatar
-                zone={zone}
-                person={p}
-                className="aspect-square w-full rounded-full border border-paper-line bg-paper"
-                textClass="text-[0.875rem]"
-              />
-              <div className="mt-1.5 w-full truncate text-[0.8125rem] font-medium leading-tight">
+              <div className="relative w-full">
+                <Avatar
+                  zone={zone}
+                  person={p}
+                  className="aspect-square w-full rounded-full bg-paper-sunken ring-1 ring-inset ring-ink/[0.07]"
+                  textClass="text-body-sm"
+                />
+              </div>
+              <div className="mt-2 w-full truncate text-label font-medium leading-snug text-ink">
                 {p.name}
               </div>
-              <div className="text-[0.6875rem] text-ink-faint">{p.titleIds.length} 部</div>
+              <div className="text-micro text-ink-faint">{p.titleIds.length} 部</div>
             </Link>
           ))}
         </div>
@@ -203,34 +200,37 @@ export function CastStrip({
 
   return (
     <div className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4 pb-1">
-      {cast.map((name) => {
+      {cast.map((name, idx) => {
         const hit = people.find((p) => p.name.trim().toLowerCase() === name.trim().toLowerCase())
         const inner = (
           <div
             className={clsx(
-              'flex w-[72px] shrink-0 flex-col items-center gap-1 rounded-xl border p-2',
-              hit ? 'border-paper-line bg-white' : 'border-dashed border-paper-line bg-paper/50'
+              'animate-staggerIn flex w-[76px] shrink-0 flex-col items-center gap-1.5 rounded-xl p-2 transition ease-standard duration-2',
+              hit
+                ? 'border border-paper-line bg-paper-card'
+                : 'border border-dashed border-paper-lineStrong bg-transparent'
             )}
+            style={{ animationDelay: `${Math.min(idx, 10) * 26}ms` }}
           >
             {hit ? (
               <Avatar
                 zone={zone}
                 person={hit}
-                className="h-10 w-10 rounded-full"
-                textClass="text-[0.6875rem]"
+                className="h-11 w-11 rounded-full bg-paper-sunken"
+                textClass="text-caption"
               />
             ) : (
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-paper-line/60 text-[0.6875rem] text-ink-faint">
-                +
+              <div className="flex h-11 w-11 items-center justify-center rounded-full bg-paper-sunken text-body-sm text-ink-faint">
+                <Icon name="plus" size={15} />
               </div>
             )}
-            <span className="w-full truncate text-center text-[0.6875rem] leading-tight">
+            <span className="w-full truncate text-center text-caption leading-tight text-ink-soft">
               {name}
             </span>
           </div>
         )
         return (
-          <button key={name} onClick={() => onPick(name)} className="shrink-0">
+          <button key={name} onClick={() => onPick(name)} className="pressable shrink-0">
             {inner}
           </button>
         )

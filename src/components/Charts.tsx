@@ -18,11 +18,11 @@ export function RemoteRow({
   return (
     <button
       onClick={onClick}
-      className="flex w-full items-center gap-3 rounded-xl border border-paper-line bg-white p-2.5 text-left active:bg-paper"
+      className="flex w-full items-center gap-3 rounded-xl border border-paper-line bg-paper-card p-2.5 text-left shadow-e1 pressable hover:bg-paper-sunken active:bg-paper-sunken"
     >
       <span
         className={clsx(
-          'w-6 shrink-0 text-center text-[1rem] font-semibold tabular-nums',
+          'w-6 shrink-0 text-center text-subtitle font-semibold tabular-nums',
           rank <= 3 ? 'text-reel' : 'text-ink-faint'
         )}
       >
@@ -30,19 +30,24 @@ export function RemoteRow({
       </span>
       <div className="w-[42px] shrink-0">
         {hit.poster ? (
-          <img src={hit.poster} alt="" loading="lazy" className="aspect-[2/3] w-full rounded-md object-cover" />
+          <img
+            src={hit.poster}
+            alt=""
+            loading="lazy"
+            className="aspect-[2/3] w-full rounded-lg object-cover"
+          />
         ) : (
-          <div className="aspect-[2/3] w-full rounded-md bg-paper-line" />
+          <div className="aspect-[2/3] w-full rounded-lg bg-paper-sunken" />
         )}
       </div>
       <div className="min-w-0 flex-1">
-        <div className="truncate text-[0.875rem] font-medium">{hit.title}</div>
-        <div className="mt-0.5 truncate text-[0.6875rem] text-ink-faint">
+        <div className="truncate text-body-sm font-medium text-ink">{hit.title}</div>
+        <div className="mt-0.5 truncate text-caption text-ink-faint">
           {hit.year || '—'} · {hit.kind === 'tv' ? '剧集' : '电影'}
         </div>
       </div>
       {hit.score ? (
-        <span className="shrink-0 rounded bg-reel-soft px-1.5 py-0.5 text-[0.6875rem] font-semibold text-reel-dark">
+        <span className="shrink-0 rounded-lg bg-reel-soft px-1.5 py-0.5 text-micro font-semibold tabular-nums text-reel-dark">
           {hit.score.toFixed(1)}
         </span>
       ) : null}
@@ -52,21 +57,21 @@ export function RemoteRow({
 
 export function TrendingCard({ hit, onClick }: { hit: TmdbSearchHit; onClick: () => void }) {
   return (
-    <button onClick={onClick} className="w-[104px] shrink-0 text-left">
-      <div className="relative overflow-hidden rounded-xl bg-paper-line">
+    <button onClick={onClick} className="w-[104px] shrink-0 text-left pressable">
+      <div className="relative overflow-hidden rounded-xl bg-paper-sunken shadow-e1">
         {hit.poster ? (
           <img src={hit.poster} alt="" loading="lazy" className="aspect-[2/3] w-full object-cover" />
         ) : (
           <div className="aspect-[2/3] w-full" />
         )}
         {hit.score ? (
-          <span className="absolute right-1 top-1 rounded bg-white/90 px-1 py-0.5 text-[0.625rem] font-semibold text-reel">
+          <span className="absolute right-1 top-1 rounded-lg bg-paper-card/92 px-1.5 py-0.5 text-micro font-semibold tabular-nums text-reel-dark shadow-e1 backdrop-blur-sm">
             {hit.score.toFixed(1)}
           </span>
         ) : null}
       </div>
-      <div className="mt-1 truncate text-[0.75rem] font-medium">{hit.title}</div>
-      <div className="text-[0.625rem] text-ink-faint">{hit.year || '—'}</div>
+      <div className="mt-1.5 truncate text-label font-medium text-ink">{hit.title}</div>
+      <div className="text-micro text-ink-faint">{hit.year || '—'}</div>
     </button>
   )
 }
@@ -85,7 +90,7 @@ export function MyRanking({ items }: { items: TitleItem[] }) {
 
   if (top.length === 0) {
     return (
-      <p className="py-4 text-center text-[0.8125rem] text-ink-faint">
+      <p className="rounded-2xl border border-dashed border-paper-lineStrong bg-paper-sunken px-4 py-8 text-center text-body-sm leading-relaxed text-ink-faint">
         还没有给影片打过分，去片库随手标个星级吧
       </p>
     )
@@ -94,21 +99,26 @@ export function MyRanking({ items }: { items: TitleItem[] }) {
   return (
     <div>
       {first && (
-        <Link to={`/title/library/${first.id}`} className="mb-2 flex gap-3 rounded-2xl border border-paper-line bg-white p-3">
+        <Link
+          to={`/title/library/${first.id}`}
+          className="animate-staggerIn mb-2 flex gap-3 rounded-2xl border border-paper-line bg-paper-card p-3 shadow-e1 pressable"
+        >
           <div className="w-[72px] shrink-0">
             <Poster zone="library" item={first} />
           </div>
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-1.5">
-              <span className="rounded bg-reel-soft px-1.5 py-0.5 text-[0.625rem] font-semibold text-reel-dark">
+              <span className="rounded-lg bg-reel px-1.5 py-0.5 text-micro font-semibold text-reel-on shadow-e1">
                 年度 No.1
               </span>
-              <span className="text-[0.6875rem] text-ink-faint">
+              <span className="text-caption tabular-nums text-ink-faint">
                 {(first.rating ?? 0) / 2} ★
               </span>
             </div>
-            <div className="mt-1 truncate text-[0.9375rem] font-semibold">{first.title}</div>
-            <p className="mt-1 line-clamp-2 text-[0.75rem] leading-relaxed text-ink-soft">
+            <div className="mt-1.5 truncate font-display text-title font-semibold text-ink">
+              {first.title}
+            </div>
+            <p className="mt-1 line-clamp-2 text-caption leading-relaxed text-ink-soft">
               {first.review || first.overview || '暂无短评'}
             </p>
           </div>
@@ -120,34 +130,36 @@ export function MyRanking({ items }: { items: TitleItem[] }) {
             <Link
               key={it.id}
               to={`/title/library/${it.id}`}
-              className="flex gap-2 rounded-xl border border-paper-line bg-white p-2"
+              className="animate-staggerIn flex gap-2 rounded-xl border border-paper-line bg-paper-card p-2 shadow-e1 pressable"
+              style={{ animationDelay: `${(idx + 1) * 28}ms` }}
             >
               <div className="w-[38px] shrink-0">
-                <Poster zone="library" item={it} rounded="rounded-md" />
+                <Poster zone="library" item={it} rounded="rounded-lg" />
               </div>
               <div className="min-w-0 flex-1">
-                <span className="text-[0.625rem] text-ink-faint">No.{idx + 2}</span>
-                <div className="truncate text-[0.8125rem] font-medium">{it.title}</div>
-                <div className="text-[0.625rem] text-ink-faint">{(it.rating ?? 0) / 2} ★</div>
+                <span className="text-micro text-ink-faint">No.{idx + 2}</span>
+                <div className="truncate text-label font-medium text-ink">{it.title}</div>
+                <div className="text-micro tabular-nums text-ink-faint">{(it.rating ?? 0) / 2} ★</div>
               </div>
             </Link>
           ) : null
         )}
       </div>
       {top.length > 3 && (
-        <div className="mt-2 space-y-1">
+        <div className="mt-2 divide-y divide-paper-line overflow-hidden rounded-xl border border-paper-line bg-paper-card">
           {top.slice(3).map((it, idx) => (
             <Link
               key={it.id}
               to={`/title/library/${it.id}`}
-              className="flex items-center gap-2.5 rounded-lg px-2 py-1.5 active:bg-paper"
+              className="animate-staggerIn flex items-center gap-2.5 px-3 py-2.5 pressable hover:bg-paper-sunken"
+              style={{ animationDelay: `${Math.min(idx + 3, 10) * 28}ms` }}
             >
-              <span className="w-4 shrink-0 text-center text-[0.75rem] text-ink-faint">
+              <span className="w-4 shrink-0 text-center text-caption tabular-nums text-ink-faint">
                 {idx + 4}
               </span>
-              <Icon name="film" size={12} className="shrink-0 text-ink-faint" />
-              <span className="min-w-0 flex-1 truncate text-[0.8125rem]">{it.title}</span>
-              <span className="shrink-0 text-[0.6875rem] text-reel">
+              <Icon name="film" size={13} className="shrink-0 text-ink-faint" />
+              <span className="min-w-0 flex-1 truncate text-body-sm text-ink">{it.title}</span>
+              <span className="shrink-0 text-caption font-medium tabular-nums text-reel-dark">
                 {(it.rating ?? 0) / 2}
               </span>
             </Link>
@@ -169,17 +181,20 @@ export function YearDigest({ items }: { items: TitleItem[] }) {
   const topDirectors = [...directorCount.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3)
 
   return (
-    <div className="rounded-2xl border border-paper-line bg-white p-3">
+    <div className="rounded-2xl border border-paper-line bg-paper-card p-4 shadow-e1">
       <div className="flex items-baseline gap-2">
-        <span className="text-[0.875rem] font-semibold">{year} 年</span>
-        <span className="text-[0.75rem] text-ink-faint">
+        <span className="font-display text-title font-semibold text-ink">{year} 年</span>
+        <span className="text-caption tabular-nums text-ink-faint">
           看完了 {done.length} 部
         </span>
       </div>
       {topDirectors.length > 0 && (
-        <div className="mt-2 flex flex-wrap gap-1.5">
+        <div className="mt-2.5 flex flex-wrap gap-1.5">
           {topDirectors.map(([name, count]) => (
-            <span key={name} className="rounded-full bg-paper px-2 py-1 text-[0.6875rem] text-ink-soft">
+            <span
+              key={name}
+              className="rounded-full bg-paper-sunken px-2.5 py-1 text-caption tabular-nums text-ink-soft"
+            >
               {name} · {count}
             </span>
           ))}

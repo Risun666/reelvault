@@ -13,24 +13,46 @@ const ITEMS: Array<{ to: string; label: string; icon: IconName }> = [
 export default function BottomNav() {
   const { pathname } = useLocation()
   return (
-    <nav className="sticky bottom-0 z-40 border-t border-paper-line bg-paper-card/95 backdrop-blur">
-      <div className="mx-auto flex max-w-[560px]">
+    <nav className="sticky bottom-0 z-40 border-t border-paper-line bg-paper-card/85 backdrop-blur-xl">
+      <div className="mx-auto flex max-w-[560px] px-1">
         {ITEMS.map((it) => {
           const active = pathname === it.to
           return (
             <Link
               key={it.to}
               to={it.to}
+              aria-current={active ? 'page' : undefined}
               className={clsx(
-                'relative flex flex-1 flex-col items-center gap-1 py-2.5 pb-safe transition-colors',
-                active ? 'text-ink' : 'text-ink-faint'
+                'group relative flex flex-1 flex-col items-center gap-1 py-2 pt-2.5 pb-safe',
+                'transition-colors ease-standard duration-2'
               )}
             >
-              {active && (
-                <span className="absolute left-1/2 top-0 h-[3px] w-6 -translate-x-1/2 rounded-full bg-reel" />
-              )}
-              <Icon name={it.icon} size={21} />
-              <span className="text-[0.6875rem] font-medium">{it.label}</span>
+              {/* 胶囊指示：选中时以弹簧曲线展开 */}
+              <span
+                className={clsx(
+                  'absolute top-1.5 h-8 w-14 rounded-full transition-all ease-spring duration-3',
+                  active ? 'scale-100 bg-reel-soft opacity-100' : 'scale-50 opacity-0'
+                )}
+              />
+              <span className="relative">
+                <Icon
+                  name={it.icon}
+                  size={22}
+                  weight={active ? 2.1 : 1.7}
+                  className={clsx(
+                    'transition-all ease-spring duration-3',
+                    active ? 'text-reel-dark' : 'text-ink-faint group-hover:text-ink-soft'
+                  )}
+                />
+              </span>
+              <span
+                className={clsx(
+                  'relative text-micro font-medium transition-colors ease-standard duration-2',
+                  active ? 'text-reel-dark' : 'text-ink-faint group-hover:text-ink-soft'
+                )}
+              >
+                {it.label}
+              </span>
             </Link>
           )
         })}

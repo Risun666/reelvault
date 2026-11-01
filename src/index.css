@@ -2,116 +2,257 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ------------------------------ 主题变量 ------------------------------ */
+/* ==========================================================================
+   影匣 ReelVault · Design Tokens v2
+   调性：胶片暖调 · 精修版（Film Warm, Refined）
+   - 色：Material You tonal palette，暖褐墨 + 放映朱红，同一色相家族，不杂色
+   - 距：Apple 8pt 网格（tailwind 默认 spacing 即 4pt 基准）
+   - 字：Material 3 类型阶梯，全部 rem，随「字号」设置整体缩放
+   - 层：3 级 elevation，暖色调阴影（不用纯黑）
+   - 动：Apple Spring + Material Standard 曲线
+   对比度：正文/次级文字均达 WCAG AA 4.5:1（见注释）
+   ========================================================================== */
 
 :root {
   color-scheme: light;
 
-  --rv-bg: 247 246 243;
-  --rv-card: 255 255 255;
-  --rv-line: 231 228 222;
-  --rv-ink: 27 28 31;
-  --rv-ink-soft: 74 77 85;
-  --rv-ink-faint: 139 143 153;
-  --rv-shadow: 27 28 31;
-  --rv-moss: 75 127 99;
+  /* ---- 表面层级（暖纸） ---- */
+  --rv-bg: 247 244 239; /* #F7F4EF */
+  --rv-surface: 255 255 255; /* #FFFFFF  卡片/抬升 */
+  --rv-sunken: 240 235 227; /* #F0EBE3  内凹/填充容器 */
+  --rv-line: 228 221 210; /* #E4DDD2  描边 */
+  --rv-line-strong: 210 200 186; /* #D2C8BA 强调描边 */
 
-  --rv-accent: 192 69 58;
-  --rv-accent-dark: 150 51 43;
-  --rv-accent-soft: 251 238 236;
+  /* ---- 文字层级 ---- */
+  --rv-ink: 27 25 23; /* #1B1917  15.98:1 */
+  --rv-ink-soft: 86 81 74; /* #56514A  7.16:1 */
+  --rv-ink-faint: 117 109 99; /* #756D63  4.64:1 */
+  --rv-ink-inverse: 255 255 255;
 
-  --rv-radius-lg: 0.625rem;
-  --rv-radius-xl: 0.875rem;
-  --rv-radius-2xl: 1.125rem;
+  /* ---- 强调：放映朱红 ---- */
+  --rv-accent: 184 55 43; /* #B8372B  5.29:1 */
+  --rv-accent-dark: 142 42 33; /* #8E2A21 */
+  --rv-accent-soft: 251 235 232; /* #FBEBE8 */
+  --rv-on-accent: 255 255 255;
+
+  /* ---- 语义色 ---- */
+  --rv-success: 47 107 79; /* #2F6B4F  5.74:1 */
+  --rv-warning: 176 116 26; /* #B0741A */
+  --rv-danger: 179 38 30; /* #B3261E */
+  --rv-danger-soft: 253 234 232;
+  /* 语义色上的反色文字 */
+  --rv-on-success: 255 255 255;
+  --rv-on-danger: 255 255 255;
+
+  /* ---- 阴影色（暖褐，非纯黑） ---- */
+  --rv-shadow: 61 51 40;
+
+  /* ---- 形状 ---- */
+  --rv-radius-sm: 0.5rem;
+  --rv-radius-md: 0.625rem;
+  --rv-radius-lg: 0.75rem;
+  --rv-radius-xl: 1rem;
+  --rv-radius-2xl: 1.25rem;
+  --rv-radius-full: 9999px;
+
+  /* ---- 动效曲线 ---- */
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --ease-decelerate: cubic-bezier(0, 0, 0.2, 1);
+  --ease-accelerate: cubic-bezier(0.3, 0, 1, 1);
+
+  --dur-1: 100ms;
+  --dur-2: 160ms;
+  --dur-3: 240ms;
+  --dur-4: 320ms;
+  --dur-5: 480ms;
+
   --rv-font-scale: 1;
 }
 
-/* 胶片暖：偏黄纸质 */
+/* ============ 胶片：偏黄纸质（sepia） ============ */
 [data-theme='sepia'] {
   --rv-bg: 244 238 228;
-  --rv-card: 253 250 244;
+  --rv-surface: 253 250 244;
+  --rv-sunken: 236 227 213;
   --rv-line: 226 215 197;
-  --rv-ink: 45 36 26;
+  --rv-line-strong: 208 194 172;
+
+  --rv-ink: 45 36 26; /* 13.2:1 */
   --rv-ink-soft: 88 74 58;
-  --rv-ink-faint: 141 126 106;
-  --rv-shadow: 60 45 28;
-  --rv-moss: 90 118 74;
+  --rv-ink-faint: 117 101 79; /* #75654F ≈ 4.6:1 */
+
   --rv-accent: 176 74 40;
   --rv-accent-dark: 132 52 26;
   --rv-accent-soft: 249 234 220;
+
+  --rv-success: 82 106 62;
+  --rv-warning: 168 118 32;
+  --rv-danger: 168 52 40;
+  --rv-danger-soft: 250 231 226;
+  --rv-on-success: 255 255 255;
+  --rv-on-danger: 255 255 255;
+
+  --rv-shadow: 74 56 34;
 }
 
-/* 深色 */
+/* ============ 深色：影院褐黑 ============ */
 [data-theme='dark'] {
   color-scheme: dark;
-  --rv-bg: 17 18 20;
-  --rv-card: 27 28 31;
-  --rv-line: 45 47 52;
-  --rv-ink: 240 240 238;
-  --rv-ink-soft: 176 179 186;
-  --rv-ink-faint: 121 125 133;
+  --rv-bg: 20 18 16; /* #141210 */
+  --rv-surface: 29 26 23; /* #1D1A17 */
+  --rv-sunken: 35 32 28;
+  --rv-line: 48 44 38;
+  --rv-line-strong: 66 61 53;
+
+  --rv-ink: 245 241 234; /* 16.6:1 */
+  --rv-ink-soft: 186 179 167; /* 8.98:1 */
+  --rv-ink-faint: 148 140 128; /* 5.63:1 */
+  --rv-ink-inverse: 20 18 16;
+
+  --rv-accent: 240 135 79; /* #F0874F  7.37:1 */
+  --rv-accent-dark: 248 179 137;
+  --rv-accent-soft: 47 31 22;
+  --rv-on-accent: 32 18 10;
+
+  --rv-success: 122 189 149;
+  --rv-warning: 226 176 92;
+  --rv-danger: 240 122 110;
+  --rv-danger-soft: 52 26 24;
+  /* 深色下语义色被提亮，反色文字要压暗才有对比度 */
+  --rv-on-success: 18 32 24;
+  --rv-on-danger: 46 18 16;
+
   --rv-shadow: 0 0 0;
-  --rv-moss: 106 158 128;
-  --rv-accent: 224 106 90;
-  --rv-accent-dark: 240 146 132;
-  --rv-accent-soft: 48 30 28;
 }
 
-/* 强调色 */
+/* ============ 影院纯黑（新增） ============ */
+[data-theme='noir'] {
+  color-scheme: dark;
+  --rv-bg: 10 10 11;
+  --rv-surface: 21 21 23;
+  --rv-sunken: 28 28 31;
+  --rv-line: 40 40 44;
+  --rv-line-strong: 58 58 63;
+
+  --rv-ink: 244 243 241; /* 17.2:1 */
+  --rv-ink-soft: 178 175 170;
+  --rv-ink-faint: 138 134 128; /* ≈5.5:1 */
+
+  --rv-accent: 232 138 92;
+  --rv-accent-dark: 246 184 148;
+  --rv-accent-soft: 40 26 19;
+  --rv-on-accent: 26 16 10;
+
+  --rv-success: 124 190 152;
+  --rv-warning: 228 180 98;
+  --rv-danger: 238 124 112;
+  --rv-danger-soft: 50 26 24;
+  --rv-on-success: 14 30 22;
+  --rv-on-danger: 44 18 16;
+
+  --rv-shadow: 0 0 0;
+}
+
+/* ============ 强调色：同一 palette 内的 5 组 ============ */
 [data-accent='ink'] {
-  --rv-accent: 39 41 46;
-  --rv-accent-dark: 22 23 26;
+  --rv-accent: 32 33 38;
+  --rv-accent-dark: 18 19 22;
   --rv-accent-soft: 232 233 235;
+  --rv-on-accent: 255 255 255;
 }
 [data-accent='moss'] {
-  --rv-accent: 63 112 84;
-  --rv-accent-dark: 43 82 60;
+  --rv-accent: 47 107 79;
+  --rv-accent-dark: 33 78 57;
   --rv-accent-soft: 232 241 235;
+  --rv-on-accent: 255 255 255;
 }
 [data-accent='indigo'] {
-  --rv-accent: 66 84 168;
-  --rv-accent-dark: 46 61 133;
+  --rv-accent: 63 80 158;
+  --rv-accent-dark: 44 57 122;
   --rv-accent-soft: 232 235 247;
+  --rv-on-accent: 255 255 255;
 }
 [data-accent='amber'] {
-  --rv-accent: 186 122 32;
-  --rv-accent-dark: 138 88 18;
+  --rv-accent: 176 116 26;
+  --rv-accent-dark: 132 86 16;
   --rv-accent-soft: 250 240 220;
+  --rv-on-accent: 255 255 255;
 }
-[data-theme='dark'][data-accent='ink'] {
-  --rv-accent: 224 226 232;
-  --rv-accent-dark: 244 245 248;
-  --rv-accent-soft: 44 46 51;
+[data-accent='plum'] {
+  --rv-accent: 123 75 148;
+  --rv-accent-dark: 95 55 116;
+  --rv-accent-soft: 243 234 247;
+  --rv-on-accent: 255 255 255;
 }
-[data-theme='dark'][data-accent='moss'] {
-  --rv-accent: 110 168 132;
-  --rv-accent-dark: 152 200 170;
-  --rv-accent-soft: 26 40 31;
-}
-[data-theme='dark'][data-accent='indigo'] {
-  --rv-accent: 137 153 217;
-  --rv-accent-dark: 173 186 234;
-  --rv-accent-soft: 28 32 50;
-}
-[data-theme='dark'][data-accent='amber'] {
-  --rv-accent: 214 165 92;
-  --rv-accent-dark: 234 197 143;
-  --rv-accent-soft: 45 35 21;
+[data-accent='teal'] {
+  --rv-accent: 40 116 114;
+  --rv-accent-dark: 27 87 86;
+  --rv-accent-soft: 231 242 241;
+  --rv-on-accent: 255 255 255;
 }
 
-/* 圆角 */
+/* 深色下强调色整体提亮，保证在深背景上的可读性 */
+[data-theme='dark'][data-accent='ink'],
+[data-theme='noir'][data-accent='ink'] {
+  --rv-accent: 226 228 233;
+  --rv-accent-dark: 244 245 248;
+  --rv-accent-soft: 42 44 49;
+  --rv-on-accent: 18 19 22;
+}
+[data-theme='dark'][data-accent='moss'],
+[data-theme='noir'][data-accent='moss'] {
+  --rv-accent: 122 189 149;
+  --rv-accent-dark: 168 214 190;
+  --rv-accent-soft: 24 40 31;
+  --rv-on-accent: 20 34 26;
+}
+[data-theme='dark'][data-accent='indigo'],
+[data-theme='noir'][data-accent='indigo'] {
+  --rv-accent: 148 164 226;
+  --rv-accent-dark: 184 196 240;
+  --rv-accent-soft: 27 31 49;
+  --rv-on-accent: 19 23 41;
+}
+[data-theme='dark'][data-accent='amber'],
+[data-theme='noir'][data-accent='amber'] {
+  --rv-accent: 228 180 98;
+  --rv-accent-dark: 240 206 148;
+  --rv-accent-soft: 43 33 18;
+  --rv-on-accent: 38 27 10;
+}
+[data-theme='dark'][data-accent='plum'],
+[data-theme='noir'][data-accent='plum'] {
+  --rv-accent: 199 152 219;
+  --rv-accent-dark: 222 189 235;
+  --rv-accent-soft: 40 26 47;
+  --rv-on-accent: 35 20 42;
+}
+[data-theme='dark'][data-accent='teal'],
+[data-theme='noir'][data-accent='teal'] {
+  --rv-accent: 130 203 200;
+  --rv-accent-dark: 176 224 222;
+  --rv-accent-soft: 20 40 40;
+  --rv-on-accent: 12 34 34;
+}
+
+/* ============ 圆角 ============ */
 [data-radius='sharp'] {
-  --rv-radius-lg: 0.25rem;
-  --rv-radius-xl: 0.375rem;
-  --rv-radius-2xl: 0.5rem;
+  --rv-radius-sm: 0.25rem;
+  --rv-radius-md: 0.375rem;
+  --rv-radius-lg: 0.5rem;
+  --rv-radius-xl: 0.625rem;
+  --rv-radius-2xl: 0.75rem;
 }
 [data-radius='round'] {
-  --rv-radius-lg: 0.875rem;
-  --rv-radius-xl: 1.25rem;
-  --rv-radius-2xl: 1.5rem;
+  --rv-radius-sm: 0.625rem;
+  --rv-radius-md: 0.875rem;
+  --rv-radius-lg: 1.125rem;
+  --rv-radius-xl: 1.375rem;
+  --rv-radius-2xl: 1.625rem;
 }
 
-/* 字号 */
+/* ============ 字号 ============ */
 [data-scale='sm'] {
   --rv-font-scale: 0.92;
 }
@@ -125,8 +266,31 @@
   --rv-font-scale: 1.18;
 }
 
+/* ============ 减少动效（无障碍 / 省电） ============ */
+[data-motion='reduced'] {
+  --dur-1: 0.01ms;
+  --dur-2: 0.01ms;
+  --dur-3: 0.01ms;
+  --dur-4: 0.01ms;
+  --dur-5: 0.01ms;
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ==========================================================================
+   基础层
+   ========================================================================== */
+
 html {
   font-size: calc(16px * var(--rv-font-scale));
+  -webkit-text-size-adjust: 100%;
 }
 
 html,
@@ -139,10 +303,14 @@ body {
   margin: 0;
   background: rgb(var(--rv-bg));
   color: rgb(var(--rv-ink));
+  font-family: theme('fontFamily.sans');
+  line-height: 1.5;
   -webkit-tap-highlight-color: transparent;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
   overscroll-behavior-y: none;
-  transition: background-color 0.2s ease, color 0.2s ease;
+  transition: background-color var(--dur-4) var(--ease-standard),
+    color var(--dur-4) var(--ease-standard);
 }
 
 * {
@@ -157,14 +325,102 @@ select {
 }
 
 ::placeholder {
-  color: rgb(var(--rv-ink-faint) / 0.8);
+  color: rgb(var(--rv-ink-faint) / 0.85);
 }
 
-/* 深色下的图片与表单 */
-[data-theme='dark'] select option {
-  background: rgb(var(--rv-card));
+/* 焦点环：只在键盘导航时出现，鼠标点击不打扰 */
+:focus-visible {
+  outline: 2px solid rgb(var(--rv-accent));
+  outline-offset: 2px;
+  border-radius: var(--rv-radius-sm);
+}
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+[data-theme='dark'] select option,
+[data-theme='noir'] select option {
+  background: rgb(var(--rv-surface));
   color: rgb(var(--rv-ink));
 }
+
+/* 细腻滚动条（桌面预览可见，移动端不显示） */
+@media (pointer: fine) {
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: rgb(var(--rv-ink) / 0.14);
+    border: 3px solid transparent;
+    border-radius: 999px;
+    background-clip: padding-box;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgb(var(--rv-ink) / 0.24);
+    background-clip: padding-box;
+  }
+}
+
+/* ==========================================================================
+   组件层
+   ========================================================================== */
+
+@layer components {
+  /* 卡片三变体 —— Material 3 + Apple 融合，圆角跟随主题设置 */
+  .card-elevated {
+    background: rgb(var(--rv-surface));
+    border-radius: var(--rv-radius-xl);
+    box-shadow: 0 1px 2px rgb(var(--rv-shadow) / 0.05),
+      0 6px 20px -8px rgb(var(--rv-shadow) / 0.14);
+    transition: box-shadow var(--dur-3) var(--ease-standard),
+      transform var(--dur-3) var(--ease-standard);
+  }
+  .card-elevated:hover {
+    box-shadow: 0 2px 6px rgb(var(--rv-shadow) / 0.08),
+      0 14px 32px -12px rgb(var(--rv-shadow) / 0.22);
+    transform: translateY(-2px);
+  }
+
+  .card-filled {
+    background: rgb(var(--rv-sunken));
+    border-radius: var(--rv-radius-xl);
+  }
+
+  .card-outlined {
+    background: rgb(var(--rv-surface));
+    border: 1px solid rgb(var(--rv-line));
+    border-radius: var(--rv-radius-xl);
+  }
+
+  /* 交互卡片：按下有回应 */
+  .pressable {
+    transition: transform var(--dur-2) var(--ease-standard),
+      opacity var(--dur-2) var(--ease-standard);
+  }
+  .pressable:active {
+    transform: scale(0.973);
+    opacity: 0.92;
+  }
+
+  /* 区块小标题：替代原来的全大写 + tracking，更符合中文阅读 */
+  .section-label {
+    font-size: 0.8125rem;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    color: rgb(var(--rv-ink-faint));
+  }
+
+  /* 发丝分隔线 */
+  .hairline {
+    height: 1px;
+    background: rgb(var(--rv-line));
+  }
+}
+
+/* ==========================================================================
+   工具层
+   ========================================================================== */
 
 @layer utilities {
   .no-scrollbar::-webkit-scrollbar {
@@ -174,17 +430,39 @@ select {
     -ms-overflow-style: none;
     scrollbar-width: none;
   }
+
   .pb-safe {
     padding-bottom: calc(env(safe-area-inset-bottom) + 0.5rem);
   }
   .pt-safe {
     padding-top: calc(env(safe-area-inset-top) + 0.5rem);
   }
+
+  /* 入场动效 */
   .fade-in {
-    animation: fadeIn 0.18s ease-out both;
+    animation: fadeIn var(--dur-3) var(--ease-decelerate) both;
   }
   .slide-up {
-    animation: slideUp 0.24s cubic-bezier(0.22, 1, 0.36, 1) both;
+    animation: slideUp var(--dur-4) var(--ease-spring) both;
+  }
+  .pop-in {
+    animation: popIn var(--dur-3) var(--ease-spring) both;
+  }
+  /* 交错淡入：配合 inline style 的 animation-delay 使用 */
+  .stagger-in {
+    animation: staggerIn var(--dur-4) var(--ease-decelerate) both;
+  }
+
+  .ease-spring {
+    transition-timing-function: var(--ease-spring);
+  }
+  .ease-standard {
+    transition-timing-function: var(--ease-standard);
+  }
+
+  /* 文本再多也不越界 */
+  .text-balance {
+    text-wrap: balance;
   }
 }
 
@@ -199,7 +477,29 @@ select {
 
 @keyframes slideUp {
   from {
-    transform: translateY(14px);
+    transform: translateY(18px) scale(0.99);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes popIn {
+  from {
+    transform: scale(0.92);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes staggerIn {
+  from {
+    transform: translateY(10px);
     opacity: 0;
   }
   to {
@@ -211,12 +511,13 @@ select {
 .skeleton {
   background: linear-gradient(
     90deg,
-    rgb(var(--rv-line)) 25%,
-    rgb(var(--rv-bg)) 37%,
-    rgb(var(--rv-line)) 63%
+    rgb(var(--rv-sunken)) 25%,
+    rgb(var(--rv-surface)) 37%,
+    rgb(var(--rv-sunken)) 63%
   );
   background-size: 400% 100%;
-  animation: shimmer 1.4s ease infinite;
+  border-radius: var(--rv-radius-md);
+  animation: shimmer 1.4s var(--ease-standard) infinite;
 }
 
 @keyframes shimmer {

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import clsx from 'clsx'
 import { useVaultSession } from '../store/vaultSession'
 import { useVaultStore } from '../store/zone'
 import { vaultPeople } from '../store/people'
@@ -95,7 +96,7 @@ export default function VaultGate() {
           <div className="flex items-center gap-1">
             <button
               onClick={() => navigate('/settings')}
-              className="rounded-full px-2 py-1.5 text-[0.75rem] text-ink-soft active:bg-paper-line"
+              className="pressable flex min-h-touch items-center rounded-full px-3 text-label text-ink-soft hover:bg-paper-sunken"
             >
               修改 PIN
             </button>
@@ -107,19 +108,23 @@ export default function VaultGate() {
                 toast('已上锁')
                 navigate('/')
               }}
-              className="flex items-center gap-1 rounded-full bg-paper px-2.5 py-1.5 text-[0.75rem] text-ink-soft"
+              className="pressable flex min-h-touch items-center gap-1.5 rounded-full border border-paper-line bg-paper-card px-3.5 text-label text-ink-soft"
             >
-              <Icon name="lock" size={13} /> 上锁
+              <Icon name="lock" size={14} /> 上锁
             </button>
           </div>
         </div>
         {justCreated && (
           <div className="mx-auto mt-2 max-w-[560px] px-4">
-            <div className="rounded-xl border border-reel/25 bg-reel-soft p-3 text-[0.75rem] leading-relaxed text-reel-dark">
+            <div className="animate-popIn rounded-2xl border border-reel/25 bg-reel-soft p-3.5 text-caption leading-relaxed text-reel-dark">
               <div className="mb-1 flex items-center justify-between">
-                <span className="font-semibold">记住入口</span>
-                <button onClick={() => setJustCreated(false)} className="p-1">
-                  <Icon name="close" size={14} />
+                <span className="text-label font-semibold">记住入口</span>
+                <button
+                  onClick={() => setJustCreated(false)}
+                  aria-label="关闭"
+                  className="pressable flex h-11 w-11 items-center justify-center rounded-xl"
+                >
+                  <Icon name="close" size={15} />
                 </button>
               </div>
               下次进入：在「设置」页底部连续点击版本号 7 次；或直接访问本页地址（
@@ -139,33 +144,46 @@ export default function VaultGate() {
     : '输入 PIN'
 
   return (
-    <div className="mx-auto flex min-h-screen max-w-[560px] flex-col items-center px-6 pb-10 pt-[8vh]">
-      <div className="mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-reel-soft text-reel-dark">
-        <Icon name="lock" size={26} />
+    <div className="mx-auto flex min-h-screen max-w-[560px] flex-col items-center px-6 pb-10 pt-[14vh]">
+      <div className="mb-8 flex h-28 w-28 items-center justify-center rounded-full border border-reel/20 bg-reel-soft text-reel-dark shadow-e2">
+        <Icon name="lock" size={40} />
       </div>
-      <div className="text-[1.0625rem] font-semibold">{label}</div>
+      <h1 className="text-headline font-semibold tracking-tight text-ink">{label}</h1>
       {!session.configured && stage === 'enter' && (
-        <p className="mt-2 max-w-[300px] text-center text-[0.7812rem] leading-relaxed text-ink-faint">
+        <p className="mt-3 max-w-[320px] text-center text-caption leading-relaxed text-ink-faint">
           隐私空间的数据与封面独立存储，不出现在片库、搜索、统计和常规导出中。PIN 只在本地以哈希形式保存，忘记则无法找回。
         </p>
       )}
 
-      <div className="my-7 flex gap-3">
+      <div
+        key={error ?? 'idle'}
+        className={clsx('my-9 flex gap-2.5', error && 'animate-shake')}
+      >
         {Array.from({ length: MAX_LEN }).map((_, i) => (
           <span
             key={i}
-            className={
-              'h-3 w-3 rounded-full transition-all ' +
-              (i < pending.length ? 'scale-110 bg-reel' : 'bg-paper-line')
-            }
-          />
+            className={clsx(
+              'flex h-12 w-10 items-center justify-center rounded-xl border transition-all ease-spring duration-2',
+              i < pending.length
+                ? 'border-reel bg-reel-soft'
+                : 'border-paper-line bg-paper-sunken'
+            )}
+          >
+            <span
+              className={clsx(
+                'h-2.5 w-2.5 rounded-full transition-all ease-spring duration-2',
+                i < pending.length ? 'scale-110 bg-reel' : 'bg-paper-lineStrong'
+              )}
+            />
+          </span>
         ))}
       </div>
 
-      {error && <p className="mb-3 h-4 text-[0.8125rem] text-reel">{error}</p>}
-      {!error && <div className="mb-3 h-4" />}
+      <div className="mb-5 flex h-6 items-center">
+        {error && <p className="animate-popIn text-caption font-medium text-danger">{error}</p>}
+      </div>
 
-      <div className="grid w-full max-w-[300px] grid-cols-3 gap-3">
+      <div className="grid w-full max-w-[300px] grid-cols-3 gap-2.5">
         {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((d) => (
           <Key key={d} onClick={() => press(d)}>{d}</Key>
         ))}
@@ -179,12 +197,18 @@ export default function VaultGate() {
       </div>
 
       {!session.configured ? (
-        <button onClick={() => navigate('/')} className="mt-8 text-[0.8125rem] text-ink-faint">
+        <button
+          onClick={() => navigate('/')}
+          className="pressable mt-10 flex min-h-touch items-center text-body-sm text-ink-faint"
+        >
           以后再说
         </button>
       ) : (
-        <div className="mt-8 text-center">
-          <button onClick={() => setConfirmWipe(true)} className="text-[0.75rem] text-ink-faint/70">
+        <div className="mt-10 flex justify-center">
+          <button
+            onClick={() => setConfirmWipe(true)}
+            className="pressable flex min-h-touch items-center text-caption text-ink-faint/80"
+          >
             忘记 PIN
           </button>
         </div>
@@ -212,7 +236,7 @@ function Key({ children, onClick }: { children: React.ReactNode; onClick: () => 
   return (
     <button
       onClick={onClick}
-      className="flex h-14 items-center justify-center rounded-2xl border border-paper-line bg-white text-[1.125rem] font-medium text-ink active:bg-paper"
+      className="pressable flex h-14 items-center justify-center rounded-2xl border border-paper-line bg-paper-card text-title font-medium text-ink hover:border-paper-lineStrong"
     >
       {children}
     </button>

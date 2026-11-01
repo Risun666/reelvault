@@ -16,11 +16,13 @@ export default function Poster({ zone, item, className, rounded = 'rounded-xl' }
   const [local, setLocal] = useState<string | null | undefined>(undefined)
   const [alt, setAlt] = useState<string | null>(null)
   const [dead, setDead] = useState(false)
+  const [loaded, setLoaded] = useState(false)
 
   // 换片或换远程地址时重置降级状态
   useEffect(() => {
     setAlt(null)
     setDead(false)
+    setLoaded(false)
   }, [item.posterRemote])
 
   useEffect(() => {
@@ -42,49 +44,65 @@ export default function Poster({ zone, item, className, rounded = 'rounded-xl' }
   return (
     <div
       className={clsx(
-        'relative aspect-[2/3] w-full overflow-hidden bg-paper-line/70',
+        'relative aspect-[2/3] w-full overflow-hidden bg-paper-sunken',
         rounded,
         className
       )}
     >
       {src ? (
-        <img
-          src={src}
-          alt={item.title}
-          loading="lazy"
-          onError={() => {
-            // 先换一组官方图片域名再试一次，仍失败才退回文字占位
-            if (!alt) {
-              const next = fallbackImageUrl(item.posterRemote)
-              if (next) {
-                setAlt(next)
-                return
+        <>
+          {!loaded && <div className="skeleton absolute inset-0 rounded-none" />}
+          <img
+            src={src}
+            alt={item.title}
+            loading="lazy"
+            decoding="async"
+            onLoad={() => setLoaded(true)}
+            onError={() => {
+              // 先换一组官方图片域名再试一次，仍失败才退回文字占位
+              if (!alt) {
+                const next = fallbackImageUrl(item.posterRemote)
+                if (next) {
+                  setAlt(next)
+                  return
+                }
               }
-            }
-            setDead(true)
-          }}
-          className="h-full w-full object-cover"
-        />
+              setDead(true)
+              setLoaded(true)
+            }}
+            className={clsx(
+              'h-full w-full object-cover transition-opacity ease-standard duration-4',
+              loaded ? 'opacity-100' : 'opacity-0'
+            )}
+          />
+        </>
       ) : (
         <PlaceholderSeeded title={item.title} />
       )}
-      <div className="pointer-events-none absolute inset-0 rounded-[inherit] ring-1 ring-inset ring-ink/[0.06]" />
+      {/* 内侧发丝描边，避免浅图与背景糊在一起 */}
+      <div className="pointer-events-none absolute inset-0 rounded-[inherit] ring-1 ring-inset ring-ink/[0.07]" />
     </div>
   )
 }
 
 function PlaceholderSeeded({ title }: { title: string }) {
+  // 低饱和的胶片灰调，不喧宾夺主
   const hue = hashString(title) % 360
   const first = title.trim().slice(0, 1).toUpperCase() || '?'
   return (
     <div
-      className="flex h-full w-full flex-col items-center justify-center gap-1"
-      style={{ background: `hsl(${hue} 22% 92%)` }}
+      className="flex h-full w-full flex-col items-center justify-center gap-1.5 px-2"
+      style={{
+        background: `linear-gradient(160deg, hsl(${hue} 18% 90%), hsl(${hue} 16% 84%))`
+      }}
     >
-      <span className="text-[1.625rem] font-semibold" style={{ color: `hsl(${hue} 30% 45%)` }}>
+      <span
+        className="font-display text-page font-semibold leading-none"
+        style={{ color: `hsl(${hue} 26% 42%)` }}
+      >
         {first}
       </span>
-      <span className="px-2 text-center text-[0.625rem] leading-tight text-ink-faint line-clamp-2">
+      <span className="line-clamp-2 text-center text-caption leading-tight text-ink-faint">
         {title}
       </span>
     </div>

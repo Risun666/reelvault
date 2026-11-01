@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
+import clsx from 'clsx'
 import { TmdbError, fetchChart, hasApiKey, searchTitles, type TmdbSearchHit } from '../lib/tmdb'
 import { fetchTitleCandidate } from '../lib/addTitle'
 import { useSettings } from '../store/settings'
@@ -9,9 +10,9 @@ import type { Zone } from '../lib/db'
 import type { TitleItem, WatchStatus } from '../types'
 import { KIND_LABEL, STATUS_LABEL, STATUS_ORDER } from '../types'
 import Icon from '../components/Icon'
-import { Button, Chip, EmptyState, Segmented, Sheet } from '../components/ui'
+import { Button, Chip, EmptyState, Section, Segmented, Sheet, Skeleton, inputCls } from '../components/ui'
 import { toast } from '../components/Toast'
-import { MyRanking, RemoteRow, TrendingCard, YearDigest } from '../components/Charts'
+import { MyRanking, YearDigest } from '../components/Charts'
 
 type Tab = 'search' | 'trending' | 'ranking'
 
@@ -141,11 +142,11 @@ export default function Discover() {
 
   return (
     <div className="mx-auto max-w-[560px] px-4 pb-10 pt-safe">
-      <header className="pb-3 pt-2">
-        <h1 className="text-[1.5rem] font-semibold tracking-tight">发现</h1>
-        <p className="mt-0.5 text-[0.75rem] text-ink-faint">
-          搜索入库 · 看看最近大家在追什么
-        </p>
+      <header className="pb-5 pt-3">
+        <h1 className="font-display text-page font-semibold leading-tight tracking-tight text-ink">
+          发现
+        </h1>
+        <p className="mt-1 text-caption text-ink-faint">搜索入库 · 看看最近大家在追什么</p>
       </header>
 
       <div className="mb-4">
@@ -160,39 +161,50 @@ export default function Discover() {
         />
       </div>
 
+      {/* TMDB 引导：一张有呼吸感的说明卡，强调色只落在图标上 */}
       {!hasApiKey(settings) && (
-        <div className="mb-3 rounded-2xl border border-reel/25 bg-reel-soft p-3 text-[0.8125rem] leading-relaxed text-reel-dark">
-          还没有填写 TMDB API Key。填一次就能自动拉封面、简介、演员表，也能看热门和榜单；也可以完全手动录入。
-          <div className="mt-2 flex gap-2">
-            <Link to="/settings">
-              <Button size="sm">去设置 API Key</Button>
-            </Link>
-            <Link to="/add/library">
-              <Button size="sm" variant="outline">
-                手动添加
-              </Button>
-            </Link>
+        <div className="mb-4 flex gap-3 rounded-2xl border border-paper-line bg-paper-sunken p-4">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-reel-soft text-reel-dark">
+            <Icon name="lock" size={19} />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-body-sm leading-relaxed text-ink-soft">
+              还没有填写 TMDB API Key。填一次就能自动拉封面、简介、演员表，也能看热门和榜单；也可以完全手动录入。
+            </p>
+            <div className="mt-3 flex gap-2">
+              <Link to="/settings">
+                <Button size="sm">去设置 API Key</Button>
+              </Link>
+              <Link to="/add/library">
+                <Button size="sm" variant="outline">
+                  手动添加
+                </Button>
+              </Link>
+            </div>
           </div>
         </div>
       )}
 
       {tab === 'search' && (
         <>
-          <div className="relative mb-3">
-            <Icon
-              name="search"
-              size={17}
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-faint"
-            />
-            <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="搜索电影或剧集…"
-              className="w-full rounded-xl border border-paper-line bg-white py-3 pl-9 pr-3 text-[0.9375rem] outline-none placeholder:text-ink-faint/80 focus:border-ink/25"
-            />
+          {/* 搜索是这个页的主角：占满整行的独立搜索区 */}
+          <div className="mb-4 rounded-2xl border border-paper-line bg-paper-card p-3">
+            <div className="relative">
+              <Icon
+                name="search"
+                size={18}
+                className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-faint"
+              />
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="搜索电影或剧集…"
+                className={clsx(inputCls, 'h-11 pl-11')}
+              />
+            </div>
           </div>
 
-          <div className="mb-4">
+          <div className="mb-5">
             <Segmented
               value={kind}
               onChange={(v) => setKind(v as typeof kind)}
@@ -204,13 +216,7 @@ export default function Discover() {
             />
           </div>
 
-          {searching && (
-            <div className="space-y-2">
-              {[0, 1, 2, 3].map((i) => (
-                <div key={i} className="skeleton h-[92px] rounded-2xl" />
-              ))}
-            </div>
-          )}
+          {searching && <RowSkeleton count={4} />}
 
           {!searching && searchError && (
             <EmptyState
@@ -247,55 +253,22 @@ export default function Discover() {
           )}
 
           <div className="space-y-2">
-            {results.map((hit) => {
-              const done = collected.has(hit.tmdbId)
-              return (
-                <button
-                  key={`${hit.kind}-${hit.tmdbId}`}
-                  onClick={() => void openHit(hit)}
-                  className="flex w-full gap-3 rounded-2xl border border-paper-line bg-white p-3 text-left active:bg-paper"
-                >
-                  <div className="w-[62px] shrink-0">
-                    {hit.poster ? (
-                      <img
-                        src={hit.poster}
-                        alt=""
-                        loading="lazy"
-                        className="aspect-[2/3] w-full rounded-lg object-cover"
-                      />
-                    ) : (
-                      <div className="aspect-[2/3] w-full rounded-lg bg-paper-line" />
-                    )}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <div className="truncate text-[0.875rem] font-medium">{hit.title}</div>
-                        <div className="mt-0.5 truncate text-[0.75rem] text-ink-faint">
-                          {hit.originalTitle !== hit.title ? `${hit.originalTitle} · ` : ''}
-                          {hit.year || '未知年份'} · {KIND_LABEL[hit.kind]}
-                        </div>
-                      </div>
-                      {done && (
-                        <span className="shrink-0 rounded-md bg-moss/10 px-1.5 py-0.5 text-[0.6875rem] text-moss">
-                          已收藏
-                        </span>
-                      )}
-                    </div>
-                    <p className="mt-1.5 line-clamp-2 text-[0.75rem] leading-relaxed text-ink-soft">
-                      {hit.overview || '暂无简介'}
-                    </p>
-                  </div>
-                </button>
-              )
-            })}
+            {results.map((hit, i) => (
+              <HitRow
+                key={`${hit.kind}-${hit.tmdbId}`}
+                hit={hit}
+                index={i}
+                done={collected.has(hit.tmdbId)}
+                onClick={() => void openHit(hit)}
+              />
+            ))}
           </div>
         </>
       )}
 
       {tab === 'trending' && (
         <>
-          <div className="mb-4">
+          <div className="mb-5">
             <Segmented
               value={chartKind}
               onChange={(v) => setChartKind(v as typeof chartKind)}
@@ -306,84 +279,77 @@ export default function Discover() {
             />
           </div>
 
-          {chartLoading && (
-            <div className="grid grid-cols-3 gap-3">
-              {[0, 1, 2, 3, 4, 5].map((i) => (
-                <div key={i} className="skeleton aspect-[2/3] rounded-xl" />
-              ))}
-            </div>
-          )}
+          {chartLoading && <RowSkeleton count={6} />}
 
           {!chartLoading && chartError && (
             <EmptyState icon="refresh" title="加载失败" desc={chartError} />
           )}
 
           {!chartLoading && !chartError && chartHits.length > 0 && (
-            <>
-              <div className="no-scrollbar -mx-4 mb-5 flex gap-3 overflow-x-auto px-4">
-                {chartHits.slice(0, 8).map((hit) => (
-                  <TrendingCard key={hit.tmdbId} hit={hit} onClick={() => void openHit(hit)} />
-                ))}
-              </div>
-              <h2 className="mb-2 text-[0.75rem] font-medium uppercase tracking-wide text-ink-faint">
-                本周热榜 · 前 {chartHits.length} 名
-              </h2>
+            <Section title={`本周热榜 · 前 ${chartHits.length} 名`}>
               <div className="space-y-2">
                 {chartHits.map((hit, i) => (
-                  <RemoteRow
+                  <HitRow
                     key={`${hit.kind}-${hit.tmdbId}`}
-                    rank={i + 1}
                     hit={hit}
+                    rank={i + 1}
+                    index={i}
+                    done={collected.has(hit.tmdbId)}
                     onClick={() => void openHit(hit)}
                   />
                 ))}
               </div>
-            </>
+            </Section>
           )}
         </>
       )}
 
       {tab === 'ranking' && (
         <>
-          <h2 className="mb-2 text-[0.75rem] font-medium uppercase tracking-wide text-ink-faint">
-            我的年度排行
-          </h2>
-          <MyRanking items={lib} />
-          <div className="mt-3">
-            <YearDigest items={lib} />
-          </div>
+          <Section title="我的年度排行">
+            <MyRanking items={lib} />
+            <div className="mt-4">
+              <YearDigest items={lib} />
+            </div>
+          </Section>
 
           {hasApiKey(settings) ? (
             <>
-              <h2 className="mb-2 mt-6 text-[0.75rem] font-medium uppercase tracking-wide text-ink-faint">
-                TMDB 高分电影榜
-              </h2>
-              {topLoading && (
+              <Section title="TMDB 高分电影榜">
+                {topLoading && <RowSkeleton count={4} />}
+                {!topLoading && (
+                  <div className="space-y-2">
+                    {topMovie.map((hit, i) => (
+                      <HitRow
+                        key={hit.tmdbId}
+                        hit={hit}
+                        rank={i + 1}
+                        index={i}
+                        done={collected.has(hit.tmdbId)}
+                        onClick={() => void openHit(hit)}
+                      />
+                    ))}
+                  </div>
+                )}
+              </Section>
+
+              <Section title="TMDB 高分剧集榜">
                 <div className="space-y-2">
-                  {[0, 1, 2, 3].map((i) => (
-                    <div key={i} className="skeleton h-[62px] rounded-xl" />
+                  {topTv.map((hit, i) => (
+                    <HitRow
+                      key={hit.tmdbId}
+                      hit={hit}
+                      rank={i + 1}
+                      index={i}
+                      done={collected.has(hit.tmdbId)}
+                      onClick={() => void openHit(hit)}
+                    />
                   ))}
                 </div>
-              )}
-              <div className="space-y-2">
-                {topMovie.map((hit, i) => (
-                  <RemoteRow key={hit.tmdbId} rank={i + 1} hit={hit} onClick={() => void openHit(hit)} />
-                ))}
-              </div>
-
-              <h2 className="mb-2 mt-6 text-[0.75rem] font-medium uppercase tracking-wide text-ink-faint">
-                TMDB 高分剧集榜
-              </h2>
-              <div className="space-y-2">
-                {topTv.map((hit, i) => (
-                  <RemoteRow key={hit.tmdbId} rank={i + 1} hit={hit} onClick={() => void openHit(hit)} />
-                ))}
-              </div>
+              </Section>
             </>
           ) : (
-            <p className="mt-4 text-center text-[0.75rem] text-ink-faint">
-              填写 TMDB API Key 后可查看高分电影与剧集榜
-            </p>
+            <EmptyState icon="chart" title="填写 TMDB API Key 后可查看高分电影与剧集榜" />
           )}
         </>
       )}
@@ -393,9 +359,9 @@ export default function Discover() {
         onClose={() => !saving && setTarget(null)}
         title="加入收藏"
         footer={
-          <div className="space-y-3">
+          <div className="space-y-4">
             <div>
-              <div className="mb-1.5 text-[0.75rem] font-medium text-ink-faint">存放位置</div>
+              <div className="mb-2 text-caption font-medium text-ink-faint">存放位置</div>
               <div className="flex gap-2">
                 <Chip active={zone === 'library'} onClick={() => setZone('library')}>
                   公开片库
@@ -408,8 +374,8 @@ export default function Discover() {
               </div>
             </div>
             <div>
-              <div className="mb-1.5 text-[0.75rem] font-medium text-ink-faint">观看状态</div>
-              <div className="flex gap-2">
+              <div className="mb-2 text-caption font-medium text-ink-faint">观看状态</div>
+              <div className="flex flex-wrap gap-2">
                 {STATUS_ORDER.map((s) => (
                   <Chip key={s} active={status === s} onClick={() => setStatus(s)}>
                     {STATUS_LABEL[s]}
@@ -424,51 +390,168 @@ export default function Discover() {
         }
       >
         {!candidate && !candidateError && (
-          <div className="space-y-2 py-2">
-            <div className="skeleton h-[180px] rounded-xl" />
-            <div className="skeleton h-4 w-3/4 rounded" />
-            <div className="skeleton h-4 w-1/2 rounded" />
+          <div className="flex gap-3 py-1">
+            <Skeleton className="aspect-[2/3] w-[104px] shrink-0 rounded-xl" />
+            <div className="min-w-0 flex-1 space-y-2">
+              <Skeleton className="h-5 w-3/4" />
+              <Skeleton className="h-3 w-2/5" />
+              <Skeleton className="h-3 w-full" />
+              <Skeleton className="h-3 w-5/6" />
+              <Skeleton className="h-3 w-4/6" />
+            </div>
           </div>
         )}
         {candidateError && (
-          <div className="py-6 text-center text-[0.8125rem] text-reel">{candidateError}</div>
+          <div className="flex items-center justify-center gap-2 py-8 text-center text-body-sm text-reel">
+            <Icon name="refresh" size={16} />
+            {candidateError}
+          </div>
         )}
         {candidate && target && (
-          <div className="flex gap-3">
+          <div className="flex gap-3.5">
             <div className="w-[104px] shrink-0">
               {target.poster ? (
-                <img src={target.poster} alt="" className="aspect-[2/3] w-full rounded-xl object-cover" />
+                <img
+                  src={target.poster}
+                  alt=""
+                  className="aspect-[2/3] w-full rounded-xl object-cover shadow-e2"
+                />
               ) : (
-                <div className="aspect-[2/3] w-full rounded-xl bg-paper-line" />
+                <div className="flex aspect-[2/3] w-full items-center justify-center rounded-xl bg-paper-sunken text-ink-faint">
+                  <Icon name="image" size={22} />
+                </div>
               )}
             </div>
             <div className="min-w-0 flex-1">
-              <div className="text-[1rem] font-semibold leading-tight">{candidate.item.title}</div>
-              <div className="mt-0.5 text-[0.75rem] text-ink-faint">
+              <div className="font-display text-headline font-semibold leading-tight text-ink">
+                {candidate.item.title}
+              </div>
+              <div className="mt-1 text-caption text-ink-faint">
                 {candidate.item.originalTitle} · {candidate.item.year}
               </div>
-              <div className="mt-2 flex flex-wrap gap-1">
+              <div className="mt-2.5 flex flex-wrap gap-1.5">
                 {candidate.item.genres?.map((g) => (
-                  <span key={g} className="rounded bg-paper px-1.5 py-0.5 text-[0.6875rem] text-ink-soft">
+                  <span
+                    key={g}
+                    className="rounded-full bg-paper-sunken px-2 py-0.5 text-micro text-ink-soft"
+                  >
                     {g}
                   </span>
                 ))}
               </div>
               {candidate.item.director && (
-                <div className="mt-2 text-[0.75rem] text-ink-soft">导演 / {candidate.item.director}</div>
+                <div className="mt-2.5 text-caption text-ink-soft">
+                  导演 / {candidate.item.director}
+                </div>
               )}
               {candidate.item.cast && candidate.item.cast.length > 0 && (
-                <div className="mt-1 text-[0.75rem] text-ink-soft">
+                <div className="mt-1 text-caption text-ink-soft">
                   主演 / {candidate.item.cast.slice(0, 5).join('、')}
                 </div>
               )}
-              <p className="mt-2 max-h-40 overflow-y-auto text-[0.78125rem] leading-relaxed text-ink-soft">
+              <div className="my-3 h-px bg-paper-line" />
+              <p className="max-h-40 overflow-y-auto text-body-sm leading-relaxed text-ink-soft">
                 {candidate.item.overview || '暂无简介'}
               </p>
             </div>
           </div>
         )}
       </Sheet>
+    </div>
+  )
+}
+
+/** 海报主导的结果行：海报 + 三层信息（片名 / 年份·类型 / 简介） */
+function HitRow({
+  hit,
+  rank,
+  index,
+  done,
+  onClick
+}: {
+  hit: TmdbSearchHit
+  rank?: number
+  index: number
+  done?: boolean
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="animate-staggerIn pressable flex w-full gap-3 rounded-2xl border border-paper-line bg-paper-card p-3 text-left transition-colors ease-standard duration-2 hover:bg-paper-sunken active:bg-paper-sunken"
+      // 交错淡入，最多错开前 10 个，避免长列表后面等待太久
+      style={{ animationDelay: `${Math.min(index, 10) * 28}ms` }}
+    >
+      {rank !== undefined && (
+        <span
+          className={clsx(
+            'w-6 shrink-0 pt-0.5 text-center font-display text-title font-semibold tabular-nums',
+            rank <= 3 ? 'text-reel-dark' : 'text-ink-faint'
+          )}
+        >
+          {rank}
+        </span>
+      )}
+      <div className="w-[60px] shrink-0">
+        {hit.poster ? (
+          <img
+            src={hit.poster}
+            alt=""
+            loading="lazy"
+            className="aspect-[2/3] w-full rounded-lg object-cover shadow-e1"
+          />
+        ) : (
+          <div className="flex aspect-[2/3] w-full items-center justify-center rounded-lg bg-paper-sunken text-ink-faint">
+            <Icon name="film" size={20} />
+          </div>
+        )}
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-start gap-2">
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-body font-medium text-ink">{hit.title}</div>
+            <div className="mt-0.5 truncate text-caption text-ink-faint">
+              {hit.originalTitle !== hit.title ? `${hit.originalTitle} · ` : ''}
+              {hit.year || '未知年份'} · {KIND_LABEL[hit.kind]}
+            </div>
+          </div>
+          <div className="flex shrink-0 flex-col items-end gap-1">
+            {hit.score ? (
+              <span className="flex items-center gap-0.5 rounded-full bg-reel-soft px-1.5 py-0.5 text-micro font-semibold text-reel-dark">
+                <Icon name="starFill" size={9} />
+                {hit.score.toFixed(1)}
+              </span>
+            ) : null}
+            {done && (
+              <span className="rounded-full bg-moss/10 px-1.5 py-0.5 text-micro text-moss">
+                已收藏
+              </span>
+            )}
+          </div>
+        </div>
+        <p className="mt-1.5 line-clamp-2 text-caption leading-relaxed text-ink-faint">
+          {hit.overview || '暂无简介'}
+        </p>
+      </div>
+    </button>
+  )
+}
+
+function RowSkeleton({ count = 4 }: { count?: number }) {
+  return (
+    <div className="space-y-2">
+      {Array.from({ length: count }).map((_, i) => (
+        <div key={i} className="flex gap-3 rounded-2xl border border-paper-line bg-paper-card p-3">
+          <Skeleton className="aspect-[2/3] w-[60px] shrink-0 rounded-lg" />
+          <div className="min-w-0 flex-1">
+            <Skeleton className="h-4 w-3/5" />
+            <Skeleton className="mt-2 h-3 w-2/5" />
+            <Skeleton className="mt-2.5 h-3 w-full" />
+            <Skeleton className="mt-1.5 h-3 w-4/6" />
+          </div>
+        </div>
+      ))}
     </div>
   )
 }
