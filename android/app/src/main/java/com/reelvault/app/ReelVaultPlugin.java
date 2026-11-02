@@ -1,6 +1,8 @@
 package com.reelvault.app;
 
+import android.app.ActivityManager;
 import android.app.DownloadManager;
+import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
@@ -8,12 +10,12 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
-import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
+import android.view.WindowManager;
 
 import androidx.core.content.FileProvider;
 
@@ -29,12 +31,19 @@ import java.io.File;
  * 影匣专用原生能力：
  * 1) setSecure / setTaskLabel —— 隐私保险箱相关的安全窗口与多任务标签
  * 2) downloadApk —— 系统下载管理器后台下载 APK，完成后自动弹出安装
+ *
+ * 安全窗口逻辑放在这里而非 MainActivity，是因为 BridgeActivity 的生命周期方法是 final，
+ * 无法在子类中覆盖；插件有 handleOnResume / handleOnPause 钩子可用。
  */
 @CapacitorPlugin(name = "ReelVault")
 public class ReelVaultPlugin extends Plugin {
 
   private static final String CHANNEL_ID = "reelvault_updates";
   private static final int NOTIFY_ID = 4231;
+
+  /** 是否处于「保险箱已解锁」状态，由 JS 通过 setSecure 同步 */
+  private static boolean vaultActive = false;
+  private static ReelVaultPlugin instance;
 
   private long downloadId = -1;
   private Handler pollHandler;
@@ -43,9 +52,31 @@ public class ReelVaultPlugin extends Plugin {
   private boolean receiverRegistered = false;
   private int iconRes = 0;
 
+  public static void setVaultActive(boolean active) {
+    vaultActive = active;
+    if (instance != null) instance.applySecure();
+  }
+
+  public static void setTaskLabel(String label) {
+    if (instance == null || label == null) return;
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+      instance.getActivity().setTaskDescription(new ActivityManager.TaskDescription(label));
+    }
+  }
+
+  private void applySecure() {
+    if (getActivity() == null) return;
+    if (vaultActive) {
+      getActivity().getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
+    } else {
+      getActivity().getWindow().clearFlags(WindowManager.LayoutParams.FLAG_SECURE);
+    }
+  }
+
   @Override
   public void load() {
     super.load();
+    instance = this;
     if (completeReceiver == null) {
       completeReceiver = new BroadcastReceiver() {
         @Override
@@ -72,7 +103,22 @@ public class ReelVaultPlugin extends Plugin {
   }
 
   @Override
-  protected void handleOnDestroy() {
+  public void handleOnResume() {
+    super.handleOnResume();
+    applySecure();
+  }
+
+  @Override
+  public void handleOnPause() {
+    super.handleOnPause();
+    // 进入后台：只要保险箱曾解锁，就确保开启安全窗，多任务快照留白（隐私模式）
+    if (vaultActive) {
+      getActivity().getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
+    }
+  }
+
+  @Override
+  public void handleOnDestroy() {
     super.handleOnDestroy();
     stopPolling();
     if (receiverRegistered && completeReceiver != null) {
@@ -83,21 +129,22 @@ public class ReelVaultPlugin extends Plugin {
       }
       receiverRegistered = false;
     }
+    if (instance == this) instance = null;
   }
 
-  // ---------- 隐私安全 ----------
+  // ---------- 隐私安全（由 JS 调用） ----------
 
   @PluginMethod
   public void setSecure(PluginCall call) {
     boolean enabled = call.getBoolean("enabled", false);
-    MainActivity.setVaultActive(enabled);
+    setVaultActive(enabled);
     call.resolve();
   }
 
   @PluginMethod
   public void setTaskLabel(PluginCall call) {
     String label = call.getString("label", null);
-    MainActivity.setTaskLabel(label);
+    setTaskLabel(label);
     call.resolve();
   }
 
@@ -187,7 +234,7 @@ public class ReelVaultPlugin extends Plugin {
     // 先尝试直接弹出安装；若处于后台被系统拦截，则通过通知的 PendingIntent 兜底
     try {
       ctx.startActivity(install);
-    } catch (Exception e) {
+    } catch (Exception ignored) {
       // 某些系统/版本在后台禁止直接启动 Activity，落到通知
     }
     postInstallNotification(ctx, install);
