@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { HashRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom'
+import { App as CapApp } from '@capacitor/app'
 import { libraryStore, vaultStore } from './store/zone'
 import { libraryPeople, vaultPeople } from './store/people'
 import { shouldAutoLock, useVaultSession } from './store/vaultSession'
@@ -7,6 +8,7 @@ import { useCollections } from './store/collections'
 import { useSettings } from './store/settings'
 import { initTheme } from './store/theme'
 import { autoTune } from './lib/tmdb'
+import { isAndroid, setPrivacyTaskLabel, setVaultSecure } from './lib/native'
 import ToastHost from './components/Toast'
 import BottomNav from './components/BottomNav'
 import Home from './pages/Home'
@@ -63,6 +65,47 @@ export default function App() {
       }
     }, 15000)
     return () => window.clearInterval(timer)
+  }, [])
+
+  // 保险箱解锁状态 → 安全窗 + 多任务标签（解锁时多任务栏显示「影匣 · 隐私模式」）
+  useEffect(() => {
+    let prev = useVaultSession.getState().active
+    setVaultSecure(prev)
+    setPrivacyTaskLabel(prev ? '影匣 · 隐私模式' : '影匣')
+    const unsub = useVaultSession.subscribe((s) => {
+      if (s.active === prev) return
+      prev = s.active
+      setVaultSecure(s.active)
+      setPrivacyTaskLabel(s.active ? '影匣 · 隐私模式' : '影匣')
+    })
+    return unsub
+  }, [])
+
+  // 进入后台：若保险箱已解锁，立即上锁并强制安全窗，使多任务快照留白
+  useEffect(() => {
+    if (!isAndroid) return
+    const handle = CapApp.addListener('appStateChange', ({ isActive }: { isActive: boolean }) => {
+      if (!isActive) {
+        const v = useVaultSession.getState()
+        if (v.active) {
+          v.lock()
+          vaultStore.getState().clearMemory()
+          vaultPeople.getState().clearMemory()
+        }
+        // 后台统一保守：只要保险箱曾解锁就保持安全窗（隐私模式）
+        if (useVaultSession.getState().active) {
+          setVaultSecure(true)
+          setPrivacyTaskLabel('影匣 · 隐私模式')
+        }
+      } else {
+        const active = useVaultSession.getState().active
+        setVaultSecure(active)
+        setPrivacyTaskLabel(active ? '影匣 · 隐私模式' : '影匣')
+      }
+    })
+    return () => {
+      void handle.then((h) => h.remove())
+    }
   }, [])
 
   return (

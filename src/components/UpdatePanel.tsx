@@ -3,6 +3,7 @@ import clsx from 'clsx'
 import Icon from './Icon'
 import { Button } from './ui'
 import { toast } from './Toast'
+import { isAndroid, downloadApkAndInstall, onDownloadProgress } from '../lib/native'
 import {
   APP_VERSION,
   DOWNLOAD_SOURCES,
@@ -21,6 +22,10 @@ export default function UpdatePanel() {
   const [checking, setChecking] = useState(false)
   const [copied, setCopied] = useState<string | null>(null)
   const [showNotes, setShowNotes] = useState(false)
+  const [dl, setDl] = useState<{ state: string; progress: number; message: string } | null>(null)
+
+  // 订阅应用内下载进度
+  useEffect(() => onDownloadProgress((e) => setDl(e)), [])
 
   const run = useCallback(async (silent: boolean) => {
     if (checking) return
@@ -53,6 +58,20 @@ export default function UpdatePanel() {
 
   const info = result?.kind === 'available' ? result.info : null
   const lastAt = result ? new Date(result.checkedAt) : null
+
+  // 安卓下，GitHub 渠道改用「App 内下载并自动安装」
+  const handleInAppDownload = async () => {
+    if (!info?.apk) return
+    try {
+      await downloadApkAndInstall(info.apk.url, `影匣 v${info.version}`)
+    } catch (e) {
+      setDl({
+        state: 'error',
+        progress: 0,
+        message: `启动下载失败：${e instanceof Error ? e.message : String(e)}`
+      })
+    }
+  }
 
   return (
     <section
@@ -147,6 +166,29 @@ export default function UpdatePanel() {
           </p>
         )}
 
+        {/* 应用内下载进度 */}
+        {dl && (dl.state === 'downloading' || dl.state === 'installing') && (
+          <div className="mt-3 animate-popIn rounded-xl border border-reel/30 bg-reel-soft p-3.5">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-body-sm font-medium text-reel-dark">{dl.message}</span>
+              {dl.state === 'downloading' && (
+                <span className="shrink-0 text-micro tabular-nums text-reel-dark">{dl.progress}%</span>
+              )}
+            </div>
+            <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-reel/20">
+              <div
+                className="h-full rounded-full bg-reel transition-all duration-300 ease-standard"
+                style={{ width: `${Math.max(4, dl.progress)}%` }}
+              />
+            </div>
+          </div>
+        )}
+        {dl && dl.state === 'error' && (
+          <div className="mt-3 rounded-xl bg-paper-sunken px-3 py-2.5 text-caption leading-relaxed text-danger">
+            {dl.message}
+          </div>
+        )}
+
         {/* 下载渠道 */}
         <div className="mt-3 space-y-2">
           {DOWNLOAD_SOURCES.map((s) => (
@@ -156,6 +198,15 @@ export default function UpdatePanel() {
               copied={copied}
               onCopy={(text) => void copy(text, s.id)}
               onOpen={() => window.open(s.url, '_blank', 'noopener,noreferrer')}
+              primary={
+                isAndroid && s.id === 'github' && info?.apk
+                  ? {
+                      label: 'App 内下载安装',
+                      hint: '将通过系统后台下载，完成后自动弹出安装；若未自动弹出，可在通知栏点击「影匣 更新已就绪」。',
+                      onClick: () => void handleInAppDownload()
+                    }
+                  : undefined
+              }
             />
           ))}
         </div>
@@ -175,12 +226,15 @@ function SourceRow({
   source,
   copied,
   onCopy,
-  onOpen
+  onOpen,
+  primary
 }: {
   source: DownloadSource
   copied: string | null
   onCopy: (text: string) => void
   onOpen: () => void
+  /** 安卓下覆盖「打开下载」按钮的更优动作（如 App 内下载安装） */
+  primary?: { label: string; hint?: string; onClick: () => void }
 }) {
   return (
     <div className="rounded-xl border border-paper-line bg-paper-sunken p-3">
@@ -194,9 +248,15 @@ function SourceRow({
 
       <div className="mt-2.5 flex gap-2">
         <div className="flex-1">
-          <Button className="w-full" onClick={onOpen}>
-            <Icon name="download" size={15} /> 打开下载
-          </Button>
+          {primary ? (
+            <Button className="w-full" onClick={primary.onClick}>
+              <Icon name="download" size={15} /> {primary.label}
+            </Button>
+          ) : (
+            <Button className="w-full" onClick={onOpen}>
+              <Icon name="download" size={15} /> 打开下载
+            </Button>
+          )}
         </div>
         <Button
           variant="outline"
@@ -206,6 +266,10 @@ function SourceRow({
           {copied === source.id ? '已复制' : '复制链接'}
         </Button>
       </div>
+
+      {primary?.hint && (
+        <p className="mt-2 text-micro leading-relaxed text-ink-faint">{primary.hint}</p>
+      )}
 
       {source.code && (
         <div className="mt-2 flex min-h-touch items-center justify-between gap-2 rounded-xl bg-paper-card px-3">

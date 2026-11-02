@@ -40,6 +40,8 @@
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- 应用内下载 APK 后安装所需（Android 8+ 系统会引导开启「安装未知应用」） -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <!-- 自定义封面：从相册/文件选择器读取图片 -->
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
     <uses-permission
