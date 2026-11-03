@@ -16,23 +16,6 @@ export interface SettingsShape {
 
   /** 是否使用内置 API Key（关掉则用下面自定义的那一个） */
   useBuiltInKey: boolean
-
-  /** 番号刮削（隐私区用） */
-  javEnabled: boolean
-  /** proxy = 本项目自带服务；metatube = MetaTube（20+ provider） */
-  javBackend: 'proxy' | 'metatube'
-  javEndpoint: string
-  javToken: string
-  /** proxy 后端启用哪些数据源（按优先级） */
-  javSources: string[]
-  /** metatube 后端指定 provider，留空由它自己挑 */
-  javProvider: string
-  /** 补简介（会多问几家站，需要对方节点能出网） */
-  javEnrich: boolean
-  /** 标题用中文翻译名还是日文原名 */
-  javTitleLang: 'translated' | 'original'
-  /** 封面经代理下载后存本地 */
-  javImageProxy: boolean
 }
 
 const KEY = 'rv.settings.v1'
@@ -46,23 +29,16 @@ const DEFAULTS: SettingsShape = {
   view: 'grid',
   includeAdult: true,
 
-  useBuiltInKey: true,
-
-  javEnabled: false,
-  javBackend: 'proxy',
-  javEndpoint: '',
-  javToken: '',
-  javSources: ['javdb', 'jav321', 'dmm', 'avsox', 'mgstage', 'fc2'],
-  javProvider: '',
-  javEnrich: false,
-  javTitleLang: 'translated',
-  javImageProxy: true
+  useBuiltInKey: true
 }
 
 function load(): SettingsShape {
   try {
     const raw = localStorage.getItem(KEY)
-    return raw ? { ...DEFAULTS, ...(JSON.parse(raw) as Partial<SettingsShape>) } : DEFAULTS
+    if (!raw) return DEFAULTS
+    const parsed = JSON.parse(raw) as Record<string, unknown>
+    for (const k of Object.keys(parsed)) if (k.startsWith('jav')) delete parsed[k]
+    return { ...DEFAULTS, ...(parsed as Partial<SettingsShape>) }
   } catch {
     return DEFAULTS
   }

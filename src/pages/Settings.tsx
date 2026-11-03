@@ -19,7 +19,6 @@ import {
   type Diagnosis,
   type ProbeResult
 } from '../lib/tmdb'
-import { testJav, JAV_SOURCES } from '../lib/jav'
 import AppearancePanel from '../components/AppearancePanel'
 import UpdatePanel from '../components/UpdatePanel'
 import { APP_VERSION, RELEASES_URL, AUTHOR_MAIL } from '../lib/updater'
@@ -39,17 +38,6 @@ export default function Settings() {
   const [probes, setProbes] = useState<ProbeResult[] | null>(null)
   const [probing, setProbing] = useState(false)
   const [diag, setDiag] = useState<Diagnosis | null>(null)
-
-  const [javEndpointDraft, setJavEndpointDraft] = useState(settings.javEndpoint)
-  const [javTokenDraft, setJavTokenDraft] = useState(settings.javToken)
-  const [javProviderDraft, setJavProviderDraft] = useState(settings.javProvider)
-  const [javTesting, setJavTesting] = useState(false)
-  const [javTest, setJavTest] = useState<{
-    ok: boolean
-    ms: number
-    message: string
-    providers: string[]
-  } | null>(null)
 
   const [exportSheet, setExportSheet] = useState(false)
   const [exportPosters, setExportPosters] = useState(true)
@@ -101,39 +89,6 @@ export default function Settings() {
     } finally {
       setProbing(false)
     }
-  }
-
-  const runJavTest = async () => {
-    const endpoint = javEndpointDraft.trim()
-    if (!endpoint) {
-      toast('先填刮削服务地址', 'bad')
-      return
-    }
-    setJavTesting(true)
-    setJavTest(null)
-    try {
-      const res = await testJav({
-        enabled: true,
-        backend: settings.javBackend,
-        endpoint,
-        token: javTokenDraft,
-        sources: settings.javSources,
-        provider: settings.javProvider,
-        enrich: settings.javEnrich,
-        titleLang: settings.javTitleLang,
-        imageProxy: settings.javImageProxy
-      })
-      setJavTest(res)
-      toast(res.ok ? '刮削服务可用' : res.message, res.ok ? 'good' : 'bad')
-    } finally {
-      setJavTesting(false)
-    }
-  }
-
-  const toggleJavSource = (id: string) => {
-    const has = settings.javSources.includes(id)
-    const next = has ? settings.javSources.filter((s) => s !== id) : [...settings.javSources, id]
-    settings.set({ javSources: next.length ? next : [id] })
   }
 
   const doExport = async () => {
@@ -375,177 +330,6 @@ export default function Settings() {
           value={settings.includeAdult}
           onChange={(v) => settings.set({ includeAdult: v })}
         />
-      </Group>
-
-      {/* 番号刮削 */}
-      <Group title="番号刮削" index={3}>
-        <ToggleRow
-          label="启用番号刮削"
-          desc="在隐私空间添加影片时，输入番号自动带出标题、封面、演员、片商。"
-          value={settings.javEnabled}
-          onChange={(v) => settings.set({ javEnabled: v })}
-        />
-
-        {settings.javEnabled && (
-          <div className="mt-1 space-y-4 border-t border-paper-line pt-3">
-            <div>
-              <div className="mb-2 text-label font-semibold text-ink-faint">刮削后端</div>
-              <Segmented
-                value={settings.javBackend}
-                onChange={(v) => settings.set({ javBackend: v as 'proxy' | 'metatube' })}
-                options={[
-                  { value: 'proxy', label: '内置代理' },
-                  { value: 'metatube', label: 'MetaTube' }
-                ]}
-              />
-              <p className="mt-2 text-caption leading-relaxed text-ink-faint">
-                {settings.javBackend === 'proxy'
-                  ? '内置 javdb / jav321 / dmm / avsox / mgstage / fc2 六源，逐个尝试、互相补位。'
-                  : 'MetaTube 自带 20+ 家 provider，无码和小众片商命中率更高，需要你自己跑一个服务。'}
-              </p>
-            </div>
-
-            <Field label="服务地址">
-              <input
-                value={javEndpointDraft}
-                onChange={(e) => setJavEndpointDraft(e.target.value)}
-                onBlur={() => settings.set({ javEndpoint: javEndpointDraft.trim() })}
-                placeholder={
-                  settings.javBackend === 'proxy'
-                    ? 'https://jav.yourdomain.com'
-                    : 'http://127.0.0.1:8080'
-                }
-                className={inputCls}
-              />
-            </Field>
-
-            <Field label="访问令牌（可选）">
-              <input
-                value={javTokenDraft}
-                onChange={(e) => setJavTokenDraft(e.target.value)}
-                onBlur={() => settings.set({ javToken: javTokenDraft.trim() })}
-                placeholder="服务设了口令才需要填"
-                className={inputCls}
-              />
-            </Field>
-
-            {settings.javBackend === 'proxy' ? (
-              <div>
-                <div className="mb-2 text-label font-semibold text-ink-faint">
-                  数据源（按优先级，至少留一个）
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {JAV_SOURCES.map((s) => {
-                    const on = settings.javSources.includes(s.id)
-                    return (
-                      <button
-                        key={s.id}
-                        onClick={() => toggleJavSource(s.id)}
-                        title={s.note}
-                        className={clsx(
-                          'pressable flex min-h-touch items-center rounded-full border px-3.5 text-label',
-                          on
-                            ? 'border-reel/40 bg-reel-soft text-reel-dark'
-                            : 'border-paper-line bg-paper-card text-ink-faint'
-                        )}
-                      >
-                        {s.label}
-                        {!s.cn && ' · 境外'}
-                      </button>
-                    )
-                  })}
-                </div>
-                <p className="mt-2 text-caption leading-relaxed text-ink-faint">
-                  标「境外」的站需要你的服务部署在境外；境内节点建议只留 JavDB 与 Jav321。
-                </p>
-              </div>
-            ) : (
-              <Field label="指定 provider（可选）">
-                <input
-                  value={javProviderDraft}
-                  onChange={(e) => setJavProviderDraft(e.target.value)}
-                  onBlur={() => settings.set({ javProvider: javProviderDraft.trim() })}
-                  placeholder="留空由 MetaTube 自选，如 javdb / dmm / fc2"
-                  className={inputCls}
-                />
-              </Field>
-            )}
-
-            <div className="space-y-0.5">
-              <ToggleRow
-                label="补全简介"
-                desc="JavDB 自身没有简介，开启后会再问 DMM 等站补齐（需要节点能出网）。"
-                value={settings.javEnrich}
-                onChange={(v) => settings.set({ javEnrich: v })}
-              />
-              <ToggleRow
-                label="封面下载后存本地"
-                desc="经代理下载并存入本地库，离线可看；关掉则只记住远程地址。"
-                value={settings.javImageProxy}
-                onChange={(v) => settings.set({ javImageProxy: v })}
-              />
-            </div>
-
-            <div>
-              <div className="mb-2 text-label font-semibold text-ink-faint">标题语言</div>
-              <Segmented
-                value={settings.javTitleLang}
-                onChange={(v) =>
-                  settings.set({ javTitleLang: v as 'translated' | 'original' })
-                }
-                options={[
-                  { value: 'translated', label: '中文译名' },
-                  { value: 'original', label: '日文原名' }
-                ]}
-              />
-            </div>
-
-            <Button
-              variant="outline"
-              className="w-full"
-              disabled={javTesting}
-              onClick={() => void runJavTest()}
-            >
-              <Icon name="refresh" size={15} /> {javTesting ? '测试中…' : '测试连接'}
-            </Button>
-
-            {javTest && (
-              <div className="rounded-xl border border-paper-line bg-paper-sunken p-3 text-caption">
-                <div className={clsx('font-medium', javTest.ok ? 'text-moss' : 'text-danger')}>
-                  {javTest.ok ? `可用（${javTest.ms}ms）` : `不可用：${javTest.message}`}
-                </div>
-                {javTest.providers.length > 0 && (
-                  <div className="mt-2 flex flex-wrap gap-1.5">
-                    {javTest.providers.map((p) => (
-                      <span
-                        key={p}
-                        className="rounded-lg bg-paper-card px-2 py-1 font-mono text-micro text-ink-soft"
-                      >
-                        {p}
-                      </span>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-
-            <div className="rounded-xl border border-reel/25 bg-reel-soft p-3 text-caption leading-relaxed text-ink-soft">
-              <div className="mb-1 text-label font-semibold text-reel-dark">使用前必读</div>
-              浏览器有跨域限制，抓不了这些站点，所以抓取发生在你<strong>自己部署的服务</strong>里：
-              <div className="mt-1.5 font-mono text-micro">
-                node workers/jav-proxy.mjs
-                <br />
-                # 或 Cloudflare Worker：cd workers && npx wrangler deploy --config
-                wrangler-jav.toml
-                <br />
-                # 或 MetaTube：docker run -d -p 8080:8080 metatube/metatube
-              </div>
-              <div className="mt-1.5 text-ink-faint">
-                启用后输入的番号会发往你填的地址，请只填自己的服务。刮削只取元数据，不含任何下载或播放链接。
-              </div>
-            </div>
-          </div>
-        )}
       </Group>
 
       <AppearancePanel />

@@ -6,20 +6,18 @@ import { compressImage, fetchRemoteImage } from '../lib/image'
 import { pickImage } from '../lib/dom'
 import { zoneStore } from '../store/zone'
 import { useVaultSession } from '../store/vaultSession'
-import { useSettings } from '../store/settings'
-import { javImageUrl, javToTitlePatch, scrapeJav, type JavResult, type JavSettings } from '../lib/jav'
 import { blankTitle } from '../lib/addTitle'
 import type { MediaKind, TitleItem, WatchStatus } from '../types'
 import { STATUS_LABEL, STATUS_ORDER, newId } from '../types'
 import Icon from '../components/Icon'
 import {
   Button,
-  Chip,
   Field,
   Section,
   Segmented,
   Skeleton,
   Stars,
+  Chip,
   inputCls,
   textareaCls
 } from '../components/ui'
@@ -42,10 +40,6 @@ export default function AddItem() {
   const [tagText, setTagText] = useState('')
   const [saving, setSaving] = useState(false)
   const [loaded, setLoaded] = useState(!editing)
-  const settings = useSettings()
-  const [javCode, setJavCode] = useState('')
-  const [javBusy, setJavBusy] = useState(false)
-  const [javResult, setJavResult] = useState<JavResult | null>(null)
 
   useEffect(() => {
     if (!id) return
@@ -92,59 +86,6 @@ export default function AddItem() {
       if (prev) URL.revokeObjectURL(prev)
       return URL.createObjectURL(blob)
     })
-  }
-
-  const javSettings: JavSettings = {
-    enabled: true,
-    backend: settings.javBackend,
-    endpoint: settings.javEndpoint,
-    token: settings.javToken,
-    sources: settings.javSources,
-    provider: settings.javProvider,
-    enrich: settings.javEnrich,
-    titleLang: settings.javTitleLang,
-    imageProxy: settings.javImageProxy
-  }
-
-  const runScrape = async () => {
-    if (!javCode.trim()) {
-      toast('先填番号', 'bad')
-      return
-    }
-    setJavBusy(true)
-    try {
-      const res = await scrapeJav(javSettings, javCode)
-      const { tags, ...patch } = javToTitlePatch(res, { titleLang: settings.javTitleLang })
-      setDraft((d) => ({
-        ...d,
-        ...patch,
-        // 已有简介就不覆盖，避免把用户自己写的冲掉
-        overview: d.overview?.trim() ? d.overview : patch.overview
-      }))
-      if (patch.cast?.length) setCastText(patch.cast.join('、'))
-      if (patch.genres?.length) setGenreText(patch.genres.join('、'))
-      if (tags?.length) setTagText((prev) => (prev.trim() ? prev : tags.join('、')))
-
-      const cover = res.cover || res.thumb
-      if (cover) {
-        const usable = javImageUrl(javSettings, cover)
-        setRemoteUrl(usable)
-        setPosterBlob(null)
-        setPosterPreview((prev) => {
-          if (prev) URL.revokeObjectURL(prev)
-          return usable
-        })
-      }
-      setJavResult(res)
-      toast(
-        res.overview ? '已填充，确认后保存' : '已填充（JavDB 没有简介，可在设置里开「补全简介」）',
-        'good'
-      )
-    } catch (e) {
-      toast(e instanceof Error ? e.message : '刮削失败', 'bad')
-    } finally {
-      setJavBusy(false)
-    }
   }
 
   const save = async () => {
@@ -230,111 +171,26 @@ export default function AddItem() {
         />
       </div>
 
-      {/* ---------------------------------------------------- 番号刮削 */}
-      {settings.javEnabled && (
-        <section className="mb-5">
-          <div className="overflow-hidden rounded-2xl border border-paper-line bg-paper-card shadow-e1">
-            <div className="flex items-center gap-2 px-4 pb-2 pt-3.5 text-label font-semibold text-reel-dark">
-              <Icon name="search" size={15} />
-              按番号自动填充
-            </div>
-
-            <div className="px-4 pb-4">
-              <div className="flex gap-2">
-                <input
-                  value={javCode}
-                  onChange={(e) => setJavCode(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') void runScrape()
-                  }}
-                  placeholder="如 SSNI-589"
-                  className={clsx(inputCls, 'text-body-sm')}
-                />
-                <Button className="shrink-0" disabled={javBusy} onClick={() => void runScrape()}>
-                  {javBusy ? '刮削中…' : '刮削'}
-                </Button>
-              </div>
-              <p className="mt-2 text-caption leading-relaxed text-ink-faint">
-                番号会发往你在「设置 → 番号刮削」里填的服务地址，也可以直接粘贴文件名（会自动抠番号）。
-                {settings.javEndpoint ? '' : '还没填地址，先去设置里配一个。'}
-              </p>
-
-              {javResult && (
-                <div className="animate-slideUp mt-3 rounded-xl bg-reel-soft p-3">
-                  <div className="flex gap-3">
-                    {javResult.cover ? (
-                      <img
-                        src={javImageUrl(javSettings, javResult.cover)}
-                        alt=""
-                        className="h-[112px] w-[78px] shrink-0 rounded-lg bg-paper-sunken object-cover shadow-e1"
-                      />
-                    ) : (
-                      <div className="flex h-[112px] w-[78px] shrink-0 items-center justify-center rounded-lg bg-paper-sunken text-ink-faint">
-                        <Icon name="image" size={22} />
-                      </div>
-                    )}
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate text-body-sm font-semibold text-ink">
-                        {javResult.title || javResult.code}
-                      </div>
-                      <div className="font-mono text-micro text-ink-faint">{javResult.code}</div>
-                      <div className="mt-1 text-caption text-ink-soft">
-                        {[
-                          javResult.releaseDate,
-                          javResult.runtime ? `${javResult.runtime} 分钟` : '',
-                          javResult.maker,
-                          javResult.score ? `评分 ${javResult.score}` : ''
-                        ]
-                          .filter(Boolean)
-                          .join(' · ')}
-                      </div>
-                      {javResult.overview && (
-                        <p className="mt-1 line-clamp-3 text-caption leading-relaxed text-ink-faint">
-                          {javResult.overview}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-
-                  {javResult.actors.length > 0 && (
-                    <div className="mt-2.5 flex flex-wrap gap-1.5">
-                      {javResult.actors.map((a) => (
-                        <span
-                          key={a}
-                          className="rounded-full bg-paper-card px-2 py-0.5 text-micro text-reel-dark shadow-e1"
-                        >
-                          {a}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-
-                  <div className="mt-2.5 flex flex-wrap items-center gap-1.5 text-micro">
-                    {(javResult.sources ?? []).map((s) => (
-                      <span
-                        key={s.id}
-                        title={s.note ?? ''}
-                        className={clsx('font-mono', s.ok ? 'text-moss' : 'text-ink-faint')}
-                      >
-                        {s.id} {s.ok ? '✓' : '✕'}
-                      </span>
-                    ))}
-                    <span className="ml-auto font-mono text-ink-faint">
-                      {javResult.provider} · {javResult.elapsed ?? 0}ms
-                      {javResult.cached ? ' · 缓存' : ''}
-                    </span>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        </section>
-      )}
 
       {/* -------------------------------------------------- 核心：名称 */}
       <Section title="基本信息" className="mb-5">
         <Field label="片名">
-          <input value={draft.title} onChange={(e) => set('title', e.target.value)} placeholder="必填" className={inputCls} />
+          <input
+            value={draft.title}
+            onChange={(e) => set('title', e.target.value)}
+            onPaste={(e) => {
+              const text = e.clipboardData?.getData('text') ?? ''
+              const m = text.match(/[《〈『「]([^》〉』」\n]{1,80})[》〉』」]/)
+              if (m) {
+                e.preventDefault()
+                const name = m[1].trim()
+                set('title', name)
+                toast(`已从《${name}》提取片名`, 'good')
+              }
+            }}
+            placeholder="必填，可粘贴《片名》自动识别"
+            className={inputCls}
+          />
         </Field>
         <Field label="原名">
           <input

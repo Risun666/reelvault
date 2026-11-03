@@ -74,3 +74,11 @@ export async function upsertFromTmdb(
   await store.upsert(item, poster)
   return item
 }
+
+/** 把一部影片（含其本地海报）复制进另一个区域，常用于「公开片库 → 隐私保险箱」 */
+export async function duplicateToZone(src: TitleItem, dstZone: Zone, posterBlob?: Blob | null): Promise<TitleItem> {
+  const now = new Date().toISOString()
+  const item: TitleItem = { ...src, id: newId(), createdAt: now, updatedAt: now }
+  await zoneStore(dstZone).getState().upsert(item, posterBlob ?? null)
+  return item
+}
