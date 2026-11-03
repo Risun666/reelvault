@@ -109,10 +109,13 @@ export default function LibraryView({
               : '载入中…'}
           </p>
         </div>
-        <Link to={`/add/${zone}`} className="shrink-0">
+        <Link
+          to={zone === 'vault' ? `/add/${zone}` : '/discover'}
+          className="shrink-0"
+        >
           <Button>
-            <Icon name="plus" size={17} weight={2.2} />
-            添加
+            <Icon name={zone === 'vault' ? 'plus' : 'compass'} size={17} weight={2.2} />
+            {zone === 'vault' ? '添加' : '发现'}
           </Button>
         </Link>
       </header>
