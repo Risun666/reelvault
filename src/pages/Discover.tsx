@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import clsx from 'clsx'
 import { TmdbError, fetchChart, hasApiKey, searchTitles, type TmdbSearchHit } from '../lib/tmdb'
 import { fetchTitleCandidate } from '../lib/addTitle'
@@ -22,6 +22,10 @@ export default function Discover() {
   const lib = useLibraryStore((s) => s.items)
   const vault = useVaultStore((s) => s.items)
 
+  // 从隐私保险箱点「添加」进来时带上 state.toVault，进入「保险箱模式」：搜索结果默认/仅可存入隐私保险箱
+  const loc = useLocation()
+  const toVault = Boolean((loc.state as { toVault?: boolean } | null)?.toVault)
+
   const [tab, setTab] = useState<Tab>('search')
   const [kind, setKind] = useState<'all' | 'movie' | 'tv'>('all')
   const [query, setQuery] = useState('')
@@ -40,9 +44,12 @@ export default function Discover() {
   const [target, setTarget] = useState<TmdbSearchHit | null>(null)
   const [candidate, setCandidate] = useState<{ item: TitleItem; posterBlob: Blob | null } | null>(null)
   const [candidateError, setCandidateError] = useState<string | null>(null)
-  const [zone, setZone] = useState<Zone>('library')
+  const [zone, setZone] = useState<Zone>(toVault ? 'vault' : 'library')
   const [status, setStatus] = useState<WatchStatus>('wish')
   const [saving, setSaving] = useState(false)
+
+  // 手动添加的落点：保险箱模式进 /add/vault，否则进 /add/library
+  const addPath = toVault ? '/add/vault' : '/add/library'
 
   const collected = useMemo(() => {
     const ids = new Set<number>()
@@ -50,6 +57,12 @@ export default function Discover() {
     vault.forEach((i) => i.tmdbId && ids.add(i.tmdbId))
     return ids
   }, [lib, vault])
+
+  const vaultIds = useMemo(() => {
+    const ids = new Set<number>()
+    vault.forEach((i) => i.tmdbId && ids.add(i.tmdbId))
+    return ids
+  }, [vault])
 
   const runSearch = useCallback(
     async (kw: string, k: 'all' | 'movie' | 'tv') => {
@@ -140,13 +153,31 @@ export default function Discover() {
     }
   }
 
+  async function addToVault(hit: TmdbSearchHit) {
+    try {
+      const { item, posterBlob } = await fetchTitleCandidate(settings, hit)
+      const poster = settings.cacheRemotePoster ? posterBlob : null
+      await zoneStore('vault').getState().upsert({ ...item, status: 'wish' }, poster)
+      toast('已加入隐私保险箱', 'good')
+    } catch (e) {
+      toast(e instanceof Error ? e.message : '加入失败', 'bad')
+    }
+  }
+
   return (
     <div className="mx-auto max-w-[560px] px-4 pb-10 pt-safe">
-      <header className="pb-5 pt-3">
-        <h1 className="font-display text-page font-semibold leading-tight tracking-tight text-ink">
-          发现
-        </h1>
-        <p className="mt-1 text-caption text-ink-faint">搜索入库 · 看看最近大家在追什么</p>
+      <header className="flex items-end justify-between gap-3 pb-5 pt-3">
+        <div className="min-w-0">
+          <h1 className="font-display text-page font-semibold leading-tight tracking-tight text-ink">
+            发现
+          </h1>
+          <p className="mt-1 text-caption text-ink-faint">搜索入库 · 看看最近大家在追什么</p>
+        </div>
+        <Link to={addPath} className="shrink-0">
+          <Button size="sm" variant="outline">
+            <Icon name="plus" size={15} /> 手动添加
+          </Button>
+        </Link>
       </header>
 
       <div className="mb-4">
@@ -175,7 +206,7 @@ export default function Discover() {
               <Link to="/settings">
                 <Button size="sm">去设置 API Key</Button>
               </Link>
-              <Link to="/add/library">
+              <Link to={addPath}>
                 <Button size="sm" variant="outline">
                   手动添加
                 </Button>
@@ -237,7 +268,7 @@ export default function Discover() {
               title="没有找到"
               desc="换个关键词试试，或者直接手动录入这部影片。"
               action={
-                <Link to="/add/library">
+                <Link to={addPath}>
                   <Button>手动添加</Button>
                 </Link>
               }
@@ -259,6 +290,9 @@ export default function Discover() {
                 hit={hit}
                 index={i}
                 done={collected.has(hit.tmdbId)}
+                canAddVault={vaultSession.active}
+                inVault={vaultIds.has(hit.tmdbId)}
+                onAddVault={() => void addToVault(hit)}
                 onClick={() => void openHit(hit)}
               />
             ))}
@@ -295,6 +329,9 @@ export default function Discover() {
                     rank={i + 1}
                     index={i}
                     done={collected.has(hit.tmdbId)}
+                    canAddVault={vaultSession.active}
+                    inVault={vaultIds.has(hit.tmdbId)}
+                    onAddVault={() => void addToVault(hit)}
                     onClick={() => void openHit(hit)}
                   />
                 ))}
@@ -326,6 +363,9 @@ export default function Discover() {
                         rank={i + 1}
                         index={i}
                         done={collected.has(hit.tmdbId)}
+                        canAddVault={vaultSession.active}
+                        inVault={vaultIds.has(hit.tmdbId)}
+                        onAddVault={() => void addToVault(hit)}
                         onClick={() => void openHit(hit)}
                       />
                     ))}
@@ -363,9 +403,11 @@ export default function Discover() {
             <div>
               <div className="mb-2 text-caption font-medium text-ink-faint">存放位置</div>
               <div className="flex gap-2">
-                <Chip active={zone === 'library'} onClick={() => setZone('library')}>
-                  公开片库
-                </Chip>
+                {!toVault && (
+                  <Chip active={zone === 'library'} onClick={() => setZone('library')}>
+                    公开片库
+                  </Chip>
+                )}
                 {vaultSession.active && (
                   <Chip active={zone === 'vault'} onClick={() => setZone('vault')} tone="reel">
                     隐私保险箱
@@ -467,13 +509,19 @@ function HitRow({
   rank,
   index,
   done,
-  onClick
+  onClick,
+  canAddVault,
+  inVault,
+  onAddVault
 }: {
   hit: TmdbSearchHit
   rank?: number
   index: number
   done?: boolean
   onClick: () => void
+  canAddVault?: boolean
+  inVault?: boolean
+  onAddVault?: () => void
 }) {
   return (
     <button
@@ -523,12 +571,25 @@ function HitRow({
                 {hit.score.toFixed(1)}
               </span>
             ) : null}
-            {done && (
-              <span className="rounded-full bg-moss/10 px-1.5 py-0.5 text-micro text-moss">
-                已收藏
-              </span>
-            )}
-          </div>
+          {done && (
+            <span className="rounded-full bg-moss/10 px-1.5 py-0.5 text-micro text-moss">
+              已收藏
+            </span>
+          )}
+          {canAddVault && !inVault && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation()
+                onAddVault?.()
+              }}
+              title="添加到隐私空间"
+              className="flex h-7 w-7 items-center justify-center rounded-full bg-reel-soft text-reel-dark transition-opacity ease-standard duration-2 active:opacity-60"
+            >
+              <Icon name="lock" size={14} />
+            </button>
+          )}
+        </div>
         </div>
         <p className="mt-1.5 line-clamp-2 text-caption leading-relaxed text-ink-faint">
           {hit.overview || '暂无简介'}

@@ -110,7 +110,8 @@ export default function LibraryView({
           </p>
         </div>
         <Link
-          to={zone === 'vault' ? `/add/${zone}` : '/discover'}
+          to="/discover"
+          state={zone === 'vault' ? { toVault: true } : undefined}
           className="shrink-0"
         >
           <Button>
@@ -241,7 +242,7 @@ export default function LibraryView({
               }
               action={
                 items.length === 0 ? (
-                  <Link to="/discover">
+                  <Link to="/discover" state={zone === 'vault' ? { toVault: true } : undefined}>
                     <Button>去添加第一部</Button>
                   </Link>
                 ) : null

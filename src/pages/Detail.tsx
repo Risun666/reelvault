@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import clsx from 'clsx'
-import { getTitle, removePoster, putPoster, type Zone } from '../lib/db'
+import { getTitle, getPosterBlob, removePoster, putPoster, type Zone } from '../lib/db'
 import { compressImage, fetchRemoteImage } from '../lib/image'
 import { pickImage } from '../lib/dom'
-import { fetchTitleCandidate } from '../lib/addTitle'
-import { zoneStore } from '../store/zone'
+import { duplicateToZone, fetchTitleCandidate } from '../lib/addTitle'
+import { useVaultStore, zoneStore } from '../store/zone'
 import { useSettings } from '../store/settings'
 import { useVaultSession } from '../store/vaultSession'
 import { useCollections } from '../store/collections'
@@ -37,6 +37,7 @@ export default function Detail() {
   const settings = useSettings()
   const vaultSession = useVaultSession()
   const store = zoneStore(zone).getState()
+  const vaultItems = useVaultStore((s) => s.items)
 
   const [item, setItem] = useState<TitleItem | null>(null)
   const [loaded, setLoaded] = useState(false)
@@ -153,6 +154,24 @@ export default function Detail() {
     }
   }
 
+  const onMoveToVault = async () => {
+    if (!item) return
+    setBusy(true)
+    try {
+      const poster = item.hasLocalPoster ? await getPosterBlob(zone, item.id) : null
+      await duplicateToZone(item, 'vault', poster)
+      // 移出公开片库：清掉片单引用、演员关联与封面，只保留隐私保险箱里的副本
+      void collections.removeTitleEverywhere(item.id)
+      await store.remove(item.id)
+      toast('已移动到隐私保险箱', 'good')
+      navigate('/')
+    } catch (e) {
+      toast(e instanceof Error ? e.message : '操作失败', 'bad')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   const bump = async (patch: Partial<EpisodeProgress>) => {
     if (!item?.progress) return
     await save({ progress: { ...item.progress, ...patch } })
@@ -168,6 +187,16 @@ export default function Detail() {
   const memberOf = useMemo(
     () => (item ? zoneCollections.filter((c) => c.itemIds.includes(item.id)) : []),
     [zoneCollections, item]
+  )
+
+  const alreadyInVault = useMemo(
+    () =>
+      vaultItems.some(
+        (i) =>
+          (item?.tmdbId != null && i.tmdbId === item.tmdbId) ||
+          (item != null && i.title.trim() === item.title.trim())
+      ),
+    [vaultItems, item]
   )
 
   if (loaded && (!item || !accessible)) {
@@ -491,6 +520,16 @@ export default function Detail() {
               <Button className="w-full" onClick={() => setCollectionSheet(true)}>
                 <Icon name="plus" size={16} /> 加入片单
               </Button>
+              {zone === 'library' && vaultSession.active && !alreadyInVault && (
+                <Button variant="outline" className="w-full" disabled={busy} onClick={() => void onMoveToVault()}>
+                  <Icon name="lock" size={16} /> 移动到隐私保险箱
+                </Button>
+              )}
+              {zone === 'library' && vaultSession.active && alreadyInVault && (
+                <div className="flex min-h-touch items-center justify-center gap-1.5 rounded-xl border border-paper-line bg-paper-sunken text-caption text-ink-faint">
+                  <Icon name="lock" size={14} /> 已在隐私保险箱中
+                </div>
+              )}
               {item.tmdbId && (
                 <Button
                   variant="outline"
