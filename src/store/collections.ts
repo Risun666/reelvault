@@ -18,7 +18,8 @@ interface CollectionState {
   remove: (id: string) => Promise<void>
   toggleItem: (collectionId: string, titleId: string) => Promise<void>
   setOrder: (collectionId: string, itemIds: string[]) => Promise<void>
-  removeTitleEverywhere: (titleId: string) => Promise<void>
+  /** 清掉某影片在片单里的引用；传 zone 则只处理该区域，绝不跨区改动 */
+  removeTitleEverywhere: (titleId: string, zone?: 'library' | 'vault') => Promise<void>
   clearMemory: () => void
 }
 
@@ -79,10 +80,25 @@ export const useCollections = create<CollectionState>((set, get) => ({
     await get().save({ ...current, itemIds })
   },
 
-  async removeTitleEverywhere(titleId) {
-    const touched = get().items.filter((c) => c.itemIds.includes(titleId))
+  async removeTitleEverywhere(titleId, zone) {
+    // 直接从数据库读取：启动时内存里只有公开区片单，未解锁时隐私区片单
+    // 并不在内存中，只看内存会留下悬空引用。指定 zone 时只改该区域的片单。
+    const all = await listCollections()
+    const touched = all.filter(
+      (c) => (c.itemIds ?? []).includes(titleId) && (!zone || c.zone === zone)
+    )
+    const now = new Date().toISOString()
     for (const c of touched) {
-      await get().save({ ...c, itemIds: c.itemIds.filter((t) => t !== titleId) })
+      const next: Collection = {
+        ...c,
+        itemIds: c.itemIds.filter((t) => t !== titleId),
+        updatedAt: now
+      }
+      await putCollection(next)
+      // 只同步内存里已经加载过的片单，不把隐私区数据带进内存
+      if (get().items.some((i) => i.id === c.id)) {
+        set({ items: get().items.map((i) => (i.id === c.id ? next : i)) })
+      }
     }
   },
 

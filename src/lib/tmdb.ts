@@ -459,6 +459,22 @@ export async function fetchChart(
 }
 
 /** 拉取完整详情，用于入库提升信息密度 */
+/** 剧照最多保留多少张（避免内置 Key 额度与列表过长） */
+export const MAX_STILLS = 15
+
+/** 从 TMDB images 响应里挑出剧照（backdrops），按评分降序取前若干张 */
+function toStills(backdrops: unknown, imageBase: string, size: 'w500' | 'w780' = 'w780'): string[] {
+  const rows = (Array.isArray(backdrops) ? backdrops : []) as Array<{
+    file_path?: string
+    vote_average?: number
+  }>
+  return rows
+    .filter((b) => typeof b.file_path === 'string' && b.file_path.length > 0)
+    .sort((a, b) => (b.vote_average ?? 0) - (a.vote_average ?? 0))
+    .slice(0, MAX_STILLS)
+    .map((b) => `${imageBase}/${size}${b.file_path}`)
+}
+
 export async function fetchDetail(
   settings: TmdbSettings,
   tmdbId: number,
@@ -467,12 +483,15 @@ export async function fetchDetail(
   item: Partial<TitleItem>
   posterRemote: string | null
   backdrop: string | null
+  stills: string[]
 }> {
   const { imageBase, key } = get(settings)
   const data = await cached(`detail|${key}|${kind}|${tmdbId}`, () =>
     requestPath<Record<string, any>>(
       settings,
-      `/${kind === 'tv' ? 'tv' : 'movie'}/${tmdbId}?api_key=${key}&language=zh-CN&append_to_response=credits`
+      // include_image_language 是 appended images 的关键：不带它时 TMDB 只按 zh-CN 过滤，
+      // backdrops 常常是 0 张；带上 zh,en,null 才能拿到无语言标记与英文剧照
+      `/${kind === 'tv' ? 'tv' : 'movie'}/${tmdbId}?api_key=${key}&language=zh-CN&append_to_response=credits,images&include_image_language=zh,en,null`
     )
   )
 
@@ -526,8 +545,28 @@ export async function fetchDetail(
   return {
     item,
     posterRemote: posterPath ? `${imageBase}/w500${posterPath}` : null,
-    backdrop: backdropPath ? `${imageBase}/w780${backdropPath}` : null
+    backdrop: backdropPath ? `${imageBase}/w780${backdropPath}` : null,
+    stills: toStills(data.images?.backdrops, imageBase)
   }
+}
+
+/**
+ * 单独拉取剧照：给历史上没有 stills 的影片补数据，以及手动添加时按片名补充。
+ * 走 /{kind}/{id}/images 端点，可以指定语言偏好，比 append 回来的更全。
+ */
+export async function fetchStills(
+  settings: TmdbSettings,
+  tmdbId: number,
+  kind: MediaKind
+): Promise<string[]> {
+  const { imageBase, key } = get(settings)
+  const data = await cached(`stills|${key}|${kind}|${tmdbId}`, () =>
+    requestPath<{ backdrops?: unknown }>(
+      settings,
+      `/${kind === 'tv' ? 'tv' : 'movie'}/${tmdbId}/images?api_key=${key}&include_image_language=zh,en,null`
+    )
+  )
+  return toStills(data.backdrops, imageBase)
 }
 
 /* --------------------------- 图片域名兜底 --------------------------- */

@@ -23,6 +23,8 @@ export interface TitleItem {
   /** TMDB 远程海报地址（作为离线 blob 丢失时的兜底） */
   posterRemote?: string
   backdrop?: string
+  /** 剧照（TMDB backdrops 或手动填写的远程图片网址） */
+  stills?: string[]
   genres?: string[]
   country?: string[]
   /** 电影片长（分钟） */

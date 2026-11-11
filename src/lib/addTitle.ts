@@ -3,8 +3,9 @@ import { fetchDetail, type TmdbSearchHit } from './tmdb'
 import type { SettingsShape } from '../store/settings'
 import type { MediaKind, TitleItem, WatchStatus } from '../types'
 import { newId } from '../types'
-import type { Zone } from './db'
+import { getPosterBlob, type Zone } from './db'
 import { zoneStore } from '../store/zone'
+import { useCollections } from '../store/collections'
 
 export function blankTitle(kind: MediaKind): TitleItem {
   const now = new Date().toISOString()
@@ -29,7 +30,7 @@ export async function fetchTitleCandidate(
   settings: Pick<SettingsShape, 'apiKey' | 'apiBase' | 'imageBase'>,
   hit: Pick<TmdbSearchHit, 'tmdbId' | 'kind'>
 ): Promise<{ item: TitleItem; posterBlob: Blob | null }> {
-  const { item: detail, posterRemote, backdrop } = await fetchDetail(settings, hit.tmdbId, hit.kind)
+  const { item: detail, posterRemote, backdrop, stills } = await fetchDetail(settings, hit.tmdbId, hit.kind)
   const now = new Date().toISOString()
   const item: TitleItem = {
     id: newId(),
@@ -49,6 +50,7 @@ export async function fetchTitleCandidate(
     tmdbScore: detail.tmdbScore,
     posterRemote: posterRemote ?? undefined,
     backdrop: backdrop ?? undefined,
+    stills: stills.length ? stills : undefined,
     progress: detail.progress,
     source: 'tmdb',
     tags: [],
@@ -81,4 +83,21 @@ export async function duplicateToZone(src: TitleItem, dstZone: Zone, posterBlob?
   const item: TitleItem = { ...src, id: newId(), createdAt: now, updatedAt: now }
   await zoneStore(dstZone).getState().upsert(item, posterBlob ?? null)
   return item
+}
+
+/**
+ * 把一部影片「移动」到另一个区域：以新 id 写入目标区（含本地海报、剧照等字段），
+ * 再清掉原区里的片单引用、演员关联与记录/封面。两区数据始终物理隔离，不跨区读取。
+ */
+export async function moveToZone(
+  srcZone: Zone,
+  dstZone: Zone,
+  src: TitleItem,
+  posterBlob?: Blob | null
+): Promise<TitleItem> {
+  const poster = posterBlob ?? (src.hasLocalPoster ? (await getPosterBlob(srcZone, src.id)) ?? null : null)
+  const moved = await duplicateToZone(src, dstZone, poster)
+  await useCollections.getState().removeTitleEverywhere(src.id, srcZone)
+  await zoneStore(srcZone).getState().remove(src.id)
+  return moved
 }

@@ -6,10 +6,13 @@ import { compressImage, fetchRemoteImage } from '../lib/image'
 import { pickImage } from '../lib/dom'
 import { zoneStore } from '../store/zone'
 import { useVaultSession } from '../store/vaultSession'
-import { blankTitle } from '../lib/addTitle'
+import { useSettings } from '../store/settings'
+import { blankTitle, moveToZone } from '../lib/addTitle'
+import { MAX_STILLS, fetchStills, hasApiKey, searchTitles } from '../lib/tmdb'
 import type { MediaKind, TitleItem, WatchStatus } from '../types'
 import { STATUS_LABEL, STATUS_ORDER, newId } from '../types'
 import Icon from '../components/Icon'
+import { StillsEditor } from '../components/Stills'
 import {
   Button,
   Field,
@@ -26,10 +29,11 @@ import { toast } from '../components/Toast'
 export default function AddItem() {
   const { zone = 'library', id } = useParams<{ zone: Zone; id?: string }>()
   const navigate = useNavigate()
-  const store = zoneStore(zone).getState()
   const vaultSession = useVaultSession()
+  const settings = useSettings()
   const editing = Boolean(id)
 
+  const [saveZone, setSaveZone] = useState<Zone>(zone)
   const [kind, setKind] = useState<MediaKind>('movie')
   const [draft, setDraft] = useState<TitleItem>(blankTitle('movie'))
   const [posterBlob, setPosterBlob] = useState<Blob | null>(null)
@@ -38,8 +42,13 @@ export default function AddItem() {
   const [castText, setCastText] = useState('')
   const [genreText, setGenreText] = useState('')
   const [tagText, setTagText] = useState('')
+  const [stills, setStills] = useState<string[]>([])
+  const [stillsBusy, setStillsBusy] = useState(false)
   const [saving, setSaving] = useState(false)
   const [loaded, setLoaded] = useState(!editing)
+
+  // 路由参数变化时同步默认储存位置（组件复用场景）
+  useEffect(() => setSaveZone(zone), [zone])
 
   useEffect(() => {
     if (!id) return
@@ -51,6 +60,7 @@ export default function AddItem() {
       setGenreText((t.genres ?? []).join('、'))
       setTagText((t.tags ?? []).join('、'))
       setRemoteUrl(t.posterRemote ?? '')
+      setStills(t.stills ?? [])
       setLoaded(true)
     })
   }, [zone, id])
@@ -88,10 +98,48 @@ export default function AddItem() {
     })
   }
 
+  /** 手动录入的影片也能按片名从 TMDB 补剧照 */
+  const onFetchStills = async () => {
+    const kw = draft.title.trim()
+    if (!kw) {
+      toast('请先填写片名，再按片名搜索剧照', 'bad')
+      return
+    }
+    if (!hasApiKey(settings)) {
+      toast('请先在设置里配置 TMDB API Key', 'bad')
+      return
+    }
+    setStillsBusy(true)
+    try {
+      const hits = await searchTitles(settings, kw, kind)
+      const hit = hits.find((h) => h.kind === kind) ?? hits[0]
+      if (!hit) {
+        toast('TMDB 没找到匹配影片', 'bad')
+        return
+      }
+      const urls = await fetchStills(settings, hit.tmdbId, hit.kind)
+      if (!urls.length) {
+        toast('这部影片暂无剧照', 'bad')
+        return
+      }
+      const next = Array.from(new Set([...stills, ...urls])).slice(0, MAX_STILLS)
+      setStills(next)
+      toast(`已从 TMDB 补充 ${next.length - stills.length} 张剧照`, 'good')
+    } catch (e) {
+      toast(e instanceof Error ? e.message : '剧照获取失败', 'bad')
+    } finally {
+      setStillsBusy(false)
+    }
+  }
+
   const save = async () => {
     const title = draft.title.trim()
     if (!title) {
       toast('请填写片名', 'bad')
+      return
+    }
+    if (saveZone === 'vault' && !vaultSession.active) {
+      toast('请先在隐私保险箱页解锁后再存入', 'bad')
       return
     }
     setSaving(true)
@@ -111,14 +159,23 @@ export default function AddItem() {
         tags: tagText.split(/[、,，\s]+/).map((s) => s.replace(/^#/, '').trim()).filter(Boolean),
         posterRemote: remoteUrl.trim() || undefined,
         hasLocalPoster: Boolean(blob) || Boolean(remoteUrl.trim()) || draft.hasLocalPoster,
+        stills: stills.length ? stills : undefined,
         progress: kind === 'tv' ? draft.progress : undefined,
         createdAt: draft.createdAt || now,
         updatedAt: now,
         id: draft.id || newId()
       }
-      await store.upsert(item, blob ?? undefined)
-      toast(editing ? '已保存修改' : '已添加', 'good')
-      navigate(`/title/${zone}/${item.id}`, { replace: true })
+
+      if (editing && saveZone !== zone) {
+        // 储存位置变了：按「移动」处理，迁移封面并清掉原区域的记录、演员与片单引用
+        const moved = await moveToZone(zone, saveZone, item, blob ?? null)
+        toast(`已移动到${saveZone === 'vault' ? '隐私保险箱' : '公开片库'}`, 'good')
+        navigate(`/title/${saveZone}/${moved.id}`, { replace: true })
+      } else {
+        await zoneStore(saveZone).getState().upsert(item, blob ?? undefined)
+        toast(editing ? '已保存修改' : saveZone === 'vault' ? '已添加到隐私保险箱' : '已添加', 'good')
+        navigate(`/title/${saveZone}/${item.id}`, { replace: true })
+      }
     } catch (e) {
       toast(e instanceof Error ? e.message : '保存失败', 'bad')
     } finally {
@@ -171,6 +228,41 @@ export default function AddItem() {
         />
       </div>
 
+      {/* ------------------------------------------------------ 储存位置 */}
+      <Section title="储存位置" className="mb-5">
+        <div className="flex flex-wrap gap-2">
+          <Chip active={saveZone === 'library'} onClick={() => setSaveZone('library')}>
+            <span className="flex items-center gap-1.5">
+              <Icon name="film" size={14} /> 公开片库
+            </span>
+          </Chip>
+          <Chip
+            active={saveZone === 'vault'}
+            tone="reel"
+            onClick={() => {
+              if (!vaultSession.active) {
+                toast('请先在隐私保险箱页解锁后再选择', 'bad')
+                return
+              }
+              setSaveZone('vault')
+            }}
+          >
+            <span className="flex items-center gap-1.5">
+              <Icon name="lock" size={14} /> 隐私保险箱
+            </span>
+          </Chip>
+        </div>
+        {!vaultSession.active && (
+          <p className="mt-2 text-caption leading-relaxed text-ink-faint">
+            隐私保险箱当前未解锁，需先在保险箱页输入 PIN；未解锁时只能存入公开片库。
+          </p>
+        )}
+        {editing && saveZone !== zone && (
+          <p className="mt-2 rounded-xl bg-paper-sunken px-3 py-2 text-caption leading-relaxed text-ink-soft">
+            保存后这部影片会移动到「{saveZone === 'vault' ? '隐私保险箱' : '公开片库'}」，原区域的记录、封面与片单引用将一并移除。
+          </p>
+        )}
+      </Section>
 
       {/* -------------------------------------------------- 核心：名称 */}
       <Section title="基本信息" className="mb-5">
@@ -338,6 +430,16 @@ export default function AddItem() {
             />
           </Field>
         </div>
+      </Section>
+
+      {/* ---------------------------------------------------------- 剧照 */}
+      <Section title="剧照" className="mb-5">
+        <StillsEditor
+          stills={stills}
+          onChange={setStills}
+          onFetchFromTmdb={onFetchStills}
+          fetching={stillsBusy}
+        />
       </Section>
 
       {/* ------------------------------------------------------ 底部操作 */}

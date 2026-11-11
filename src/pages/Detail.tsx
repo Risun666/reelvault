@@ -1,19 +1,21 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import clsx from 'clsx'
-import { getTitle, getPosterBlob, removePoster, putPoster, type Zone } from '../lib/db'
+import { getTitle, removePoster, putPoster, type Zone } from '../lib/db'
 import { compressImage, fetchRemoteImage } from '../lib/image'
 import { pickImage } from '../lib/dom'
-import { duplicateToZone, fetchTitleCandidate } from '../lib/addTitle'
+import { fetchTitleCandidate, moveToZone } from '../lib/addTitle'
 import { useVaultStore, zoneStore } from '../store/zone'
 import { useSettings } from '../store/settings'
 import { useVaultSession } from '../store/vaultSession'
 import { useCollections } from '../store/collections'
 import { watchedEpisodesOf, totalEpisodesOf, minutesOf, formatMinutes } from '../lib/stats'
+import { clearResultCache, fetchStills, hasApiKey } from '../lib/tmdb'
 import type { EpisodeProgress, TitleItem } from '../types'
 import { KIND_LABEL, STATUS_LABEL, STATUS_ORDER } from '../types'
 import Poster from '../components/Poster'
 import Icon from '../components/Icon'
+import { StillsStrip, StillsViewer } from '../components/Stills'
 import {
   Button,
   Card,
@@ -49,6 +51,8 @@ export default function Detail() {
   const [busy, setBusy] = useState(false)
   const [collectionSheet, setCollectionSheet] = useState(false)
   const [collectionDraft, setCollectionDraft] = useState('')
+  const [stillsIndex, setStillsIndex] = useState<number | null>(null)
+  const [stillsBusy, setStillsBusy] = useState(false)
   const collections = useCollections()
 
   const accessible = zone !== 'vault' || vaultSession.active
@@ -69,6 +73,23 @@ export default function Detail() {
   useEffect(() => {
     if (zone === 'vault') void useVaultSession.getState().touch()
   }, [zone])
+
+  // 老版本入库的影片没有剧照：有 TMDB ID 时自动补拉一次并写回本区记录
+  useEffect(() => {
+    const current = item
+    if (!current?.tmdbId || (current.stills?.length ?? 0) > 0 || !hasApiKey(settings)) return
+    let alive = true
+    void fetchStills(settings, current.tmdbId, current.kind)
+      .then((urls) => {
+        if (!alive || !urls.length) return
+        void zoneStore(zone).getState().patch(current.id, { stills: urls })
+        setItem((prev) => (prev ? { ...prev, stills: urls } : prev))
+      })
+      .catch(() => undefined)
+    return () => {
+      alive = false
+    }
+  }, [item?.id, item?.tmdbId, item?.kind, item?.stills?.length, zone, settings])
 
   const save = async (patch: Partial<TitleItem>) => {
     if (!item) return
@@ -138,6 +159,7 @@ export default function Detail() {
         tmdbScore: c.item.tmdbScore,
         posterRemote: c.item.posterRemote,
         backdrop: c.item.backdrop,
+        stills: c.item.stills?.length ? c.item.stills : item.stills,
         progress: c.item.progress ?? item.progress,
         hasLocalPoster: item.hasLocalPoster ?? Boolean(c.item.posterRemote)
       }
@@ -154,15 +176,29 @@ export default function Detail() {
     }
   }
 
+  const onRefreshStills = async () => {
+    if (!item?.tmdbId) return
+    setStillsBusy(true)
+    try {
+      clearResultCache()
+      const urls = await fetchStills(settings, item.tmdbId, item.kind)
+      await store.patch(item.id, { stills: urls })
+      setItem({ ...item, stills: urls })
+      setStillsIndex(null)
+      toast(urls.length ? `已载入 ${urls.length} 张剧照` : '这部影片暂无剧照', urls.length ? 'good' : 'bad')
+    } catch (e) {
+      toast(e instanceof Error ? e.message : '剧照获取失败', 'bad')
+    } finally {
+      setStillsBusy(false)
+    }
+  }
+
   const onMoveToVault = async () => {
     if (!item) return
     setBusy(true)
     try {
-      const poster = item.hasLocalPoster ? await getPosterBlob(zone, item.id) : null
-      await duplicateToZone(item, 'vault', poster)
-      // 移出公开片库：清掉片单引用、演员关联与封面，只保留隐私保险箱里的副本
-      void collections.removeTitleEverywhere(item.id)
-      await store.remove(item.id)
+      // 移动 = 以新 id 写入隐私保险箱（含海报、剧照），再清掉公开片库的记录与引用
+      await moveToZone(zone, 'vault', item)
       toast('已移动到隐私保险箱', 'good')
       navigate('/')
     } catch (e) {
@@ -218,6 +254,8 @@ export default function Detail() {
       </div>
     )
   }
+
+  const stills = item.stills ?? []
 
   return (
     <div className="mx-auto max-w-[560px] pb-10">
@@ -446,6 +484,33 @@ export default function Detail() {
               </Section>
             )}
 
+            {/* -------------------------------------------------------- 剧照 */}
+            {(stills.length > 0 || item.tmdbId) && (
+              <Section
+                title="剧照"
+                action={
+                  item.tmdbId ? (
+                    <button
+                      onClick={() => void onRefreshStills()}
+                      disabled={stillsBusy}
+                      className="min-h-touch rounded-lg px-2 text-label font-medium text-reel-dark active:opacity-60 disabled:opacity-40"
+                    >
+                      {stillsBusy ? '获取中…' : '刷新'}
+                    </button>
+                  ) : undefined
+                }
+              >
+                {stills.length > 0 ? (
+                  <StillsStrip urls={stills} onOpen={setStillsIndex} />
+                ) : (
+                  <div className="flex items-center gap-2 rounded-xl border border-paper-line bg-paper-sunken px-3.5 py-3 text-caption text-ink-faint">
+                    <Icon name="image" size={16} />
+                    {stillsBusy ? '正在从 TMDB 获取剧照…' : '暂无剧照，点右上角「刷新」从 TMDB 获取'}
+                  </div>
+                )}
+              </Section>
+            )}
+
             {/* -------------------------------------------------------- 短评 */}
             <Section title="短评">
               <textarea
@@ -641,6 +706,8 @@ export default function Detail() {
         </div>
       </Sheet>
 
+      <StillsViewer urls={stills} index={stillsIndex} onClose={() => setStillsIndex(null)} />
+
       <Confirm
         open={confirmDelete}
         title={`删除《${item.title}》？`}
@@ -649,7 +716,7 @@ export default function Detail() {
         confirmText="删除"
         onCancel={() => setConfirmDelete(false)}
         onConfirm={() => {
-          void collections.removeTitleEverywhere(item.id)
+          void collections.removeTitleEverywhere(item.id, zone)
           void store.remove(item.id)
           setConfirmDelete(false)
           toast('已删除')
