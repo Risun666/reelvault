@@ -10,6 +10,7 @@ import { KIND_LABEL, STATUS_LABEL } from '../types'
 import Poster from '../components/Poster'
 import Icon from '../components/Icon'
 import PeopleGrid from '../components/PeopleGrid'
+import Shelf3D from '../components/Shelf3D'
 import { Button, Chip, EmptyState, IconButton, Segmented, Skeleton } from '../components/ui'
 
 const STATUS_TABS: Array<{ value: WatchStatus | 'all'; label: string }> = [
@@ -28,6 +29,12 @@ const SORTS: Array<{ value: SortKey; label: string }> = [
   { value: 'year', label: '发行年份' },
   { value: 'title', label: '名称' }
 ]
+
+type ViewKey = 'grid' | 'list' | 'shelf'
+
+/** 视图三态循环：宫格 → 列表 → 3D 书架 */
+const NEXT_VIEW: Record<ViewKey, ViewKey> = { grid: 'list', list: 'shelf', shelf: 'grid' }
+const VIEW_LABEL: Record<ViewKey, string> = { grid: '宫格', list: '列表', shelf: '书架' }
 
 export default function LibraryView({
   zone,
@@ -158,12 +165,16 @@ export default function LibraryView({
               active={filtersOn}
               onClick={() => setShowFilter((v) => !v)}
             />
-            <IconButton
-              icon={settings.view === 'grid' ? 'list' : 'grid'}
-              label={settings.view === 'grid' ? '切到列表' : '切到宫格'}
-              size={44}
-              onClick={() => settings.set({ view: settings.view === 'grid' ? 'list' : 'grid' })}
-            />
+            {/* 视图切换：明确显示当前视图，点按循环切换 书架→宫格→列表 */}
+            <button
+              type="button"
+              onClick={() => settings.set({ view: NEXT_VIEW[settings.view] })}
+              aria-label={`切换视图，当前${VIEW_LABEL[settings.view]}`}
+              className="flex h-11 shrink-0 items-center gap-1.5 rounded-xl border border-paper-line bg-paper-card px-3 text-label font-medium text-ink-soft transition-all ease-spring duration-2 active:scale-[0.97] hover:border-paper-lineStrong hover:text-ink"
+            >
+              <Icon name={settings.view} size={16} />
+              {VIEW_LABEL[settings.view]}
+            </button>
           </div>
 
           {/* ------------------------------------------------------ 筛选面板 */}
@@ -230,7 +241,11 @@ export default function LibraryView({
 
           {/* ---------------------------------------------------------- 内容 */}
           {!ready ? (
-            <GridSkeleton cols={theme.columns} gap={gapOf(theme.density)} count={6} />
+            settings.view === 'shelf' ? (
+              <ShelfSkeleton />
+            ) : (
+              <GridSkeleton cols={theme.columns} gap={gapOf(theme.density)} count={6} />
+            )
           ) : filtered.length === 0 ? (
             <EmptyState
               icon={items.length === 0 ? 'film' : 'search'}
@@ -247,6 +262,13 @@ export default function LibraryView({
                   </Link>
                 ) : null
               }
+            />
+          ) : settings.view === 'shelf' ? (
+            // 未加任何筛选时按状态智能分排（在看 → 想看 → 看过 → 弃坑沉底）
+            <Shelf3D
+              zone={zone}
+              items={filtered}
+              grouped={status === 'all' && !q.trim() && kind === 'all' && !tag}
             />
           ) : settings.view === 'grid' ? (
             <div
@@ -276,6 +298,23 @@ export default function LibraryView({
           )}
         </>
       )}
+    </div>
+  )
+}
+
+/** 3D 卡牌轮播骨架：中央大卡 + 两侧侧卡 + 底部详情文字条 */
+function ShelfSkeleton() {
+  return (
+    <div className="-mx-4">
+      <div className="flex items-center justify-center gap-5 px-4 pt-6">
+        <Skeleton className="aspect-[2/3] w-[72px] shrink-0 rounded-xl opacity-55" />
+        <Skeleton className="aspect-[2/3] w-[min(62vw,264px)] shrink-0 rounded-2xl" />
+        <Skeleton className="aspect-[2/3] w-[72px] shrink-0 rounded-xl opacity-55" />
+      </div>
+      <div className="px-8 pt-8 text-center">
+        <Skeleton className="mx-auto h-6 w-2/5" />
+        <Skeleton className="mx-auto mt-2.5 h-3.5 w-3/5" />
+      </div>
     </div>
   )
 }

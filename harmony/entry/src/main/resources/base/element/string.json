@@ -1,0 +1,16 @@
+{
+  "string": [
+    {
+      "name": "module_desc",
+      "value": "影匣 ReelVault 主模块"
+    },
+    {
+      "name": "EntryAbility_desc",
+      "value": "只收藏，不播放。记录你看过的每一部电影与剧集。"
+    },
+    {
+      "name": "EntryAbility_label",
+      "value": "影匣"
+    }
+  ]
+}

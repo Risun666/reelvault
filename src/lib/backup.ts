@@ -1,6 +1,9 @@
 import { type Zone, getPosterBlob, listCollections, listTitles, putCollection, putPoster, putTitles } from './db'
 import { blobToDataUrl, dataUrlToBlob } from './image'
 import { deriveVaultKey, encryptJson, decryptJson, randomBytes, toB64 } from './crypto'
+import { Capacitor } from '@capacitor/core'
+import { Directory, Encoding, Filesystem } from '@capacitor/filesystem'
+import { Share } from '@capacitor/share'
 import type { Collection, TitleItem } from '../types'
 
 export const BACKUP_APP = 'reelvault'
@@ -63,12 +66,54 @@ export async function buildBackup(opts: ExportOptions): Promise<BackupFile> {
   return backup
 }
 
-export function downloadJson(data: unknown, filename: string) {
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
-  triggerDownload(blob, filename)
+export interface SaveResult {
+  /** web 浏览器下载 | 原生已存盘 | 已拉起分享面板 | 用户取消分享 */
+  mode: 'web' | 'saved' | 'shared' | 'cancelled'
+  /** 完整存储路径（原生存盘时） */
+  path?: string
+  filename: string
 }
 
-export function downloadCsv(titles: TitleItem[], filename: string) {
+/**
+ * 保存文本文件。网页走浏览器下载；App 内写入公共 Documents/ReelVault 目录；
+ * 部分 ROM 限制公共目录写入时，退化为写缓存 + 系统分享面板（用户自己选去向）。
+ * 旧实现用 <a download> + blob URL，Android WebView 没有下载管理器，导出会静默失败。
+ */
+async function saveText(content: string, filename: string, mime: string): Promise<SaveResult> {
+  if (!Capacitor.isNativePlatform()) {
+    triggerDownload(new Blob([content], { type: mime }), filename)
+    return { mode: 'web', filename }
+  }
+  try {
+    const res = await Filesystem.writeFile({
+      path: `ReelVault/${filename}`,
+      data: content,
+      directory: Directory.Documents,
+      encoding: Encoding.UTF8,
+      recursive: true
+    })
+    return { mode: 'saved', path: res.uri, filename }
+  } catch {
+    try {
+      const res = await Filesystem.writeFile({
+        path: filename,
+        data: content,
+        directory: Directory.Cache,
+        encoding: Encoding.UTF8
+      })
+      await Share.share({ files: [res.uri], title: filename })
+      return { mode: 'shared', path: res.uri, filename }
+    } catch {
+      return { mode: 'cancelled', filename }
+    }
+  }
+}
+
+export function downloadJson(data: unknown, filename: string): Promise<SaveResult> {
+  return saveText(JSON.stringify(data, null, 2), filename, 'application/json')
+}
+
+export async function downloadCsv(titles: TitleItem[], filename: string): Promise<SaveResult> {
   const headers = ['标题', '原名', '类型', '年份', '状态', '评分', '标签', '已看至', '观看日期', '备注']
   const esc = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`
   const statusMap: Record<string, string> = { wish: '想看', watching: '在看', done: '看过', dropped: '弃坑' }
@@ -89,7 +134,7 @@ export function downloadCsv(titles: TitleItem[], filename: string) {
       .join(',')
   )
   const csv = '﻿' + [headers.map(esc).join(','), ...rows].join('\r\n')
-  triggerDownload(new Blob([csv], { type: 'text/csv;charset=utf-8' }), filename)
+  return saveText(csv, filename, 'text/csv;charset=utf-8')
 }
 
 function triggerDownload(blob: Blob, filename: string) {

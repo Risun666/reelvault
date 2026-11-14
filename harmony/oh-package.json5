@@ -1,0 +1,13 @@
+{
+  "name": "reelvault",
+  "version": "1.4.7",
+  "description": "影匣 ReelVault · HarmonyOS WebView 壳工程",
+  "main": "",
+  "author": "",
+  "license": "",
+  "dependencies": {},
+  "devDependencies": {
+    "@ohos/hvigor": "5.0.5",
+    "@ohos/hvigor-ohos-plugin": "5.0.5"
+  }
+}

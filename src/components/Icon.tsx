@@ -30,6 +30,7 @@ export type IconName =
   | 'filter'
   | 'grid'
   | 'list'
+  | 'shelf'
   | 'calendar'
   | 'clock'
   | 'image'
@@ -65,6 +66,7 @@ const PATHS: Record<IconName, string> = {
   filter: 'M4 6h16l-6 7v6l-4 2v-8Z',
   grid: 'M4 4h7v7H4zm9 0h7v7h-7zM4 13h7v7H4zm9 0h7v7h-7z',
   list: 'M4 7h16M4 12h16M4 17h16',
+  shelf: 'M5 4v16m4.5-16v16M14 5l3.2 14.5M3.5 20h17',
   calendar: 'M4 6h16v15H4zM4 10h16M9 3v5m6-5v5',
   clock: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18Zm0 4v5l3.5 2',
   image: 'M4 5h16v14H4zm0 11 5-5 4 4 3-3 4 4',
@@ -79,7 +81,7 @@ const PATHS: Record<IconName, string> = {
 
 const STROKE_ONLY: IconName[] = [
   'home', 'chart', 'plus', 'search', 'close', 'check', 'trash', 'edit', 'download', 'upload',
-  'chevronLeft', 'chevronRight', 'film', 'tv', 'filter', 'grid', 'list', 'calendar', 'clock',
+  'chevronLeft', 'chevronRight', 'film', 'tv', 'filter', 'grid', 'list', 'shelf', 'calendar', 'clock',
   'image', 'tag', 'eyeOff', 'refresh', 'share', 'star', 'mail', 'user'
 ]
 

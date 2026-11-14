@@ -7,7 +7,7 @@ import { useVaultSession } from '../store/vaultSession'
 import { useCollections } from '../store/collections'
 import { clearZone } from '../lib/db'
 import { pickJson } from '../lib/dom'
-import { buildBackup, downloadCsv, downloadJson, importBackup } from '../lib/backup'
+import { buildBackup, downloadCsv, downloadJson, importBackup, type SaveResult } from '../lib/backup'
 import Icon from '../components/Icon'
 import { Button, Confirm, Field, Segmented, Sheet, inputCls } from '../components/ui'
 import { toast } from '../components/Toast'
@@ -91,6 +91,14 @@ export default function Settings() {
     }
   }
 
+  /** 统一提示导出结果，明确告诉用户文件去了哪里 */
+  const toastSaved = (r: SaveResult) => {
+    if (r.mode === 'saved') toast(`备份已保存到 Documents/ReelVault/${r.filename}`, 'good')
+    else if (r.mode === 'shared') toast('已调起系统分享，请选择保存位置', 'good')
+    else if (r.mode === 'cancelled') toast('已取消分享，文件未保存', 'bad')
+    else toast('备份已导出', 'good')
+  }
+
   const doExport = async () => {
     setExporting(true)
     try {
@@ -101,10 +109,10 @@ export default function Settings() {
       })
       // 只保留数字后取前 12 位 = YYYYMMDDHHmm（避免出现中括号字符类被误当成 Tailwind 候选）
       const stamp = new Date().toISOString().replace(/\D/g, '').slice(0, 12)
-      downloadJson(backup, `reelvault-backup-${stamp}.json`)
+      const save = await downloadJson(backup, `reelvault-backup-${stamp}.json`)
       setExportSheet(false)
       setExportPin('')
-      toast('备份已导出', 'good')
+      toastSaved(save)
     } catch (e) {
       toast(e instanceof Error ? e.message : '导出失败', 'bad')
     } finally {
@@ -343,7 +351,7 @@ export default function Settings() {
           <Button
             variant="outline"
             className="w-full"
-            onClick={() => downloadCsv(library, `reelvault-${Date.now()}.csv`)}
+            onClick={() => void downloadCsv(library, `reelvault-${Date.now()}.csv`).then(toastSaved)}
           >
             <Icon name="list" size={16} /> 导出片单 CSV（{library.length} 条）
           </Button>
@@ -362,7 +370,8 @@ export default function Settings() {
           </Button>
         </div>
         <p className="pb-2 pt-1 text-caption leading-relaxed text-ink-faint">
-          备份是单个 JSON 文件，封面可内嵌；隐私区可选「不导出」或「AES 加密后导出」。
+          备份是单个 JSON 文件，封面可内嵌；隐私区可选「不导出」或「AES 加密后导出」。App 内导出的文件保存在
+          「Documents/ReelVault」文件夹（手机「文件管理 → Documents」里可找到）。
         </p>
       </Group>
 

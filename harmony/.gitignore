@@ -1,0 +1,15 @@
+/node_modules
+/oh_modules
+/local.properties
+/.idea
+**/build
+/.hvigor
+.clangd
+.clang-format
+.clang-tidy
+/.appanalyzer
+**/src/main/resources/rawfile
+/outputs
+/release
+*.har
+*.hap

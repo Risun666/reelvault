@@ -416,6 +416,236 @@ select {
     height: 1px;
     background: rgb(var(--rv-line));
   }
+
+  /* ==========================================================================
+     3D 全息卡牌轮播（Shelf3D）—— 沉浸式大片轮播：中央大卡 + 两侧立体侧卡
+     立体盒几何：厚 34px，front translateZ(17px) / spine rotateY(-90deg) 面朝左
+     / back rotateY(180deg) / top rotateX(90deg) 书页
+     全部走 token：阴影、圆角、文字色深浅主题自动适配；夜间 3D 更有氛围
+     ========================================================================== */
+  .deck-stage {
+    perspective: 1300px;
+    perspective-origin: 50% 40%;
+  }
+
+  .deck-track {
+    display: flex;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+    /* 上方留呼吸空间给抬起的大卡；左右内边距让首尾卡也能滚动到正中 */
+    padding-top: 22px;
+    padding-inline: calc(50% - 75px);
+  }
+
+  /* 槽位比卡窄 90px：相邻卡大面积扇形重叠，露出 Coverflow 纵深；
+     min-width:0 抵消 flex 项 min-content 下限，否则宽卡会把槽位撑回去 */
+  .deck-slot {
+    flex: 0 0 150px;
+    min-width: 0;
+    display: flex;
+    justify-content: center;
+    scroll-snap-align: center;
+    scroll-snap-stop: always;
+  }
+
+  .deck-card {
+    position: relative;
+    flex: none;
+    width: min(62vw, 264px);
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .deck-cube {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 2 / 3;
+    transform-style: preserve-3d;
+    transition: transform var(--dur-5) var(--ease-spring),
+      filter var(--dur-4) var(--ease-standard),
+      opacity var(--dur-4) var(--ease-standard);
+    will-change: transform;
+  }
+
+  .deck-face {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    border-radius: var(--rv-radius-2xl);
+    backface-visibility: hidden;
+  }
+  .deck-front {
+    transform: translateZ(17px);
+    box-shadow: 0 2px 8px rgb(var(--rv-shadow) / 0.28);
+  }
+  .deck-card.is-active .deck-front {
+    /* 居中大卡：白描边 + 高投影，像被聚光拿起 */
+    box-shadow:
+      0 0 0 2.5px rgb(var(--rv-surface)),
+      0 26px 46px -16px rgb(var(--rv-shadow) / 0.62);
+  }
+  /* 书脊：34px 厚，贴左侧，面朝左；颜色按观看状态着色（tsx 内联 token 类） */
+  .deck-spine {
+    inset: 0 auto 0 0;
+    width: 34px;
+    transform: rotateY(-90deg) translateZ(17px);
+    transform-origin: left center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: inset -5px 0 10px rgb(var(--rv-shadow) / 0.24);
+  }
+  .deck-spine-text {
+    writing-mode: vertical-rl;
+    text-orientation: mixed;
+    font-family: theme('fontFamily.display');
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    line-height: 1.1;
+    max-height: 88%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  /* 右侧背面：左邻卡向右倾时露出，压暗的卡背 */
+  .deck-back {
+    transform: rotateY(180deg) translateZ(17px);
+    background: linear-gradient(
+      200deg,
+      rgb(var(--rv-line-strong)),
+      rgb(var(--rv-line)) 55%,
+      rgb(var(--rv-line-strong))
+    );
+    box-shadow: inset 0 0 22px rgb(var(--rv-shadow) / 0.3);
+  }
+  /* 顶部书页：层叠纸纹，旋转时给足厚度感 */
+  .deck-top {
+    inset: 0 0 auto 0;
+    height: 34px;
+    transform: rotateX(90deg) translateZ(17px);
+    transform-origin: center top;
+    background: repeating-linear-gradient(
+      to right,
+      rgb(var(--rv-ink) / 0.14) 0 1px,
+      rgb(var(--rv-surface)) 1px 4px
+    );
+  }
+
+  /* 全息光泽：一束彩虹光循环扫过居中大卡，全息卡质感 */
+  .deck-holo {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    pointer-events: none;
+    border-radius: var(--rv-radius-2xl);
+    background: linear-gradient(
+      115deg,
+      transparent 30%,
+      rgb(255 214 235 / 0.2) 40%,
+      rgb(188 255 251 / 0.18) 48%,
+      rgb(215 228 255 / 0.22) 56%,
+      rgb(255 255 255 / 0.1) 64%,
+      transparent 72%
+    );
+    transform: translateX(-160%) skewX(-12deg);
+    opacity: 0;
+  }
+  .deck-card:hover .deck-holo {
+    opacity: 1;
+    transform: translateX(160%) skewX(-12deg);
+    transition: transform 640ms var(--ease-standard), opacity 300ms var(--ease-standard);
+  }
+  .deck-card.is-active .deck-holo {
+    opacity: 1;
+    animation: deck-sweep 3.4s var(--ease-standard) infinite;
+  }
+  @keyframes deck-sweep {
+    0% {
+      transform: translateX(-160%) skewX(-12deg);
+    }
+    46% {
+      transform: translateX(160%) skewX(-12deg);
+    }
+    100% {
+      transform: translateX(160%) skewX(-12deg);
+    }
+  }
+
+  /* 居中卡上的小徽章：评分 / 状态 / 追剧进度 */
+  .deck-chip {
+    position: absolute;
+    z-index: 3;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    top: 0.625rem;
+    height: 1.375rem;
+    padding: 0 0.5rem;
+    border-radius: 9999px;
+    background: rgb(var(--rv-surface) / 0.92);
+    color: rgb(var(--rv-ink));
+    font-size: 0.6875rem;
+    font-weight: 600;
+    line-height: 1;
+    box-shadow: 0 1px 2px rgb(var(--rv-shadow) / 0.05), 0 2px 8px -4px rgb(var(--rv-shadow) / 0.12);
+    -webkit-backdrop-filter: blur(4px);
+    backdrop-filter: blur(4px);
+    animation: fadeIn 240ms var(--ease-standard) both;
+  }
+  /* 「在看」徽章：强调色胶囊 */
+  .deck-chip-reel {
+    background: rgb(var(--rv-accent) / 0.92);
+    color: rgb(var(--rv-on-accent));
+  }
+  /* 追剧进度徽章：底部居中胶囊 */
+  .deck-chip-progress {
+    top: auto;
+    left: 50%;
+    bottom: 0.625rem;
+    transform: translateX(-50%);
+    animation: none;
+  }
+
+  /* 卡下接触阴影：居中抬起时铺开呼吸 */
+  .deck-card::after {
+    content: '';
+    position: absolute;
+    left: 6%;
+    right: 6%;
+    bottom: -12px;
+    height: 18px;
+    border-radius: 50%;
+    background: radial-gradient(
+      ellipse at center,
+      rgb(var(--rv-shadow) / 0.42),
+      transparent 68%
+    );
+    transform: scaleX(0.82);
+    opacity: 0.7;
+    transition: transform var(--dur-5) var(--ease-spring),
+      opacity var(--dur-5) var(--ease-spring);
+  }
+  .deck-card.is-active::after {
+    transform: scaleX(1.05) scaleY(0.8);
+    opacity: 0.95;
+  }
+
+  /* 弃坑卡：去饱和压暗，沉底（放在外层卡上，与侧卡亮度 filter 叠加生效） */
+  .deck-card.is-muted {
+    filter: saturate(0.4) brightness(0.94);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .deck-cube {
+      transition: none;
+    }
+    .deck-card.is-active .deck-holo {
+      opacity: 0;
+      animation: none;
+    }
+  }
 }
 
 /* ==========================================================================

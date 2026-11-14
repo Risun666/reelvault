@@ -34,3 +34,8 @@ npm-debug.log*
 Thumbs.db
 .env
 .env.local
+
+# 鸿蒙本地构建产物与效果截图
+harmony/entry/src/main/resources/rawfile/
+shots/
+*.hap
