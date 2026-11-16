@@ -60,6 +60,8 @@
   --ease-standard: cubic-bezier(0.2, 0, 0, 1);
   --ease-decelerate: cubic-bezier(0, 0, 0.2, 1);
   --ease-accelerate: cubic-bezier(0.3, 0, 1, 1);
+  /* 果冻：过冲更足（约 18%），按下去松手会明显「弹回来」 */
+  --ease-jelly: cubic-bezier(0.22, 1.72, 0.36, 1);
 
   --dur-1: 100ms;
   --dur-2: 160ms;
@@ -393,14 +395,17 @@ select {
     border-radius: var(--rv-radius-xl);
   }
 
-  /* 交互卡片：按下有回应 */
+  /* 交互卡片：按下去有回应，松手带一点回弹（果冻手感的基础层） */
   .pressable {
-    transition: transform var(--dur-2) var(--ease-standard),
+    transition: transform var(--dur-3) var(--ease-spring),
       opacity var(--dur-2) var(--ease-standard);
+    -webkit-tap-highlight-color: transparent;
   }
   .pressable:active {
-    transform: scale(0.973);
-    opacity: 0.92;
+    transform: scale(0.955);
+    opacity: 0.94;
+    transition-duration: 90ms;
+    transition-timing-function: var(--ease-standard);
   }
 
   /* 区块小标题：替代原来的全大写 + tracking，更符合中文阅读 */
@@ -433,8 +438,8 @@ select {
     overflow-x: auto;
     scroll-snap-type: x mandatory;
     -webkit-overflow-scrolling: touch;
-    /* 上方留呼吸空间给抬起的大卡；左右内边距让首尾卡也能滚动到正中 */
-    padding-top: 22px;
+    /* 上方留一点呼吸空间给抬起的居中卡；左右内边距让首尾卡也能滚到正中 */
+    padding-top: 10px;
     padding-inline: calc(50% - 75px);
   }
 
@@ -452,7 +457,8 @@ select {
   .deck-card {
     position: relative;
     flex: none;
-    width: min(62vw, 264px);
+    /* 高度按视口兜底：保证「大卡 + 底部详情 + 操作按钮」一屏内放得下 */
+    width: min(58vw, 250px, calc((100dvh - 500px) / 1.5));
     cursor: pointer;
     -webkit-tap-highlight-color: transparent;
   }
@@ -462,10 +468,41 @@ select {
     width: 100%;
     aspect-ratio: 2 / 3;
     transform-style: preserve-3d;
-    transition: transform var(--dur-5) var(--ease-spring),
-      filter var(--dur-4) var(--ease-standard),
-      opacity var(--dur-4) var(--ease-standard);
+    /* 只用 transform / opacity 做动画，两者都能走合成层，滑动时不重排 */
+    transition: transform var(--dur-4) var(--ease-spring),
+      opacity var(--dur-3) var(--ease-standard);
+  }
+  /* 只有居中的那张提前升层，避免整排卡各自占一个 GPU 层 */
+  .deck-card.is-active .deck-cube {
     will-change: transform;
+  }
+
+  /* 果冻内胆：包住所有面，落位时整体软弹，不影响外层 3D 姿态 */
+  .deck-jelly {
+    position: absolute;
+    inset: 0;
+    transform-style: preserve-3d;
+    transform-origin: center 60%;
+  }
+  .deck-jelly.is-jelly {
+    animation: jellyPop 620ms var(--ease-standard) both;
+  }
+  @keyframes jellyPop {
+    0% {
+      transform: scale(1, 1);
+    }
+    26% {
+      transform: scale(1.045, 0.955);
+    }
+    50% {
+      transform: scale(0.972, 1.028);
+    }
+    72% {
+      transform: scale(1.012, 0.988);
+    }
+    100% {
+      transform: scale(1, 1);
+    }
   }
 
   .deck-face {
@@ -478,6 +515,17 @@ select {
   .deck-front {
     transform: translateZ(17px);
     box-shadow: 0 2px 8px rgb(var(--rv-shadow) / 0.28);
+  }
+  /* 侧卡压暗：用半透明遮罩代替 filter —— 3D 元素上的 filter 会触发
+     每个面重复栅格化，是滑动时掉帧的主要原因之一 */
+  .deck-shade {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    pointer-events: none;
+    border-radius: inherit;
+    background: rgb(var(--rv-shadow) / 0.9);
+    transition: opacity var(--dur-4) var(--ease-standard);
   }
   .deck-card.is-active .deck-front {
     /* 居中大卡：白描边 + 高投影，像被聚光拿起 */
@@ -584,14 +632,13 @@ select {
     height: 1.375rem;
     padding: 0 0.5rem;
     border-radius: 9999px;
-    background: rgb(var(--rv-surface) / 0.92);
     color: rgb(var(--rv-ink));
     font-size: 0.6875rem;
     font-weight: 600;
     line-height: 1;
     box-shadow: 0 1px 2px rgb(var(--rv-shadow) / 0.05), 0 2px 8px -4px rgb(var(--rv-shadow) / 0.12);
-    -webkit-backdrop-filter: blur(4px);
-    backdrop-filter: blur(4px);
+    /* 不用 backdrop-filter：浮在无限循环的全息光上会逐帧重新模糊 */
+    background: rgb(var(--rv-surface) / 0.94);
     animation: fadeIn 240ms var(--ease-standard) both;
   }
   /* 「在看」徽章：强调色胶囊 */
@@ -632,14 +679,23 @@ select {
     opacity: 0.95;
   }
 
-  /* 弃坑卡：去饱和压暗，沉底（放在外层卡上，与侧卡亮度 filter 叠加生效） */
-  .deck-card.is-muted {
-    filter: saturate(0.4) brightness(0.94);
+  /* 弃坑卡：压暗沉底。用遮罩而不是 filter，避免 3D 面重复栅格化 */
+  .deck-card.is-muted .deck-front::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    pointer-events: none;
+    border-radius: inherit;
+    background: rgb(var(--rv-shadow) / 0.34);
   }
 
   @media (prefers-reduced-motion: reduce) {
     .deck-cube {
       transition: none;
+    }
+    .deck-jelly.is-jelly {
+      animation: none;
     }
     .deck-card.is-active .deck-holo {
       opacity: 0;
@@ -681,6 +737,11 @@ select {
   /* 交错淡入：配合 inline style 的 animation-delay 使用 */
   .stagger-in {
     animation: staggerIn var(--dur-4) var(--ease-decelerate) both;
+  }
+
+  /* 果冻落位：内容切换时从下方软弹进来（书架详情、页码用） */
+  .jelly-in {
+    animation: jellyIn var(--dur-5) var(--ease-standard) both;
   }
 
   .ease-spring {
@@ -738,6 +799,37 @@ select {
   }
 }
 
+@keyframes jellyIn {
+  0% {
+    opacity: 0;
+    transform: translateY(14px) scale(0.965);
+  }
+  55% {
+    opacity: 1;
+    transform: translateY(-2px) scale(1.012);
+  }
+  78% {
+    transform: translateY(1px) scale(0.996);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* 「果冻手感」关掉时：回弹退化为常规过渡 */
+[data-jelly='off'] .pressable {
+  transition-timing-function: var(--ease-standard);
+  transition-duration: var(--dur-2);
+}
+[data-jelly='off'] .pressable:active {
+  transform: scale(0.972);
+}
+[data-jelly='off'] .deck-jelly.is-jelly,
+[data-jelly='off'] .jelly-in {
+  animation: none;
+}
+
 .skeleton {
   background: linear-gradient(
     90deg,
@@ -756,5 +848,75 @@ select {
   }
   100% {
     background-position: 0 50%;
+  }
+}
+
+/* ==========================================================================
+   果冻按压 —— 全站按钮的手感层（放在最后，特异性压过各处 utility）
+   由 src/lib/jelly.ts 的事件委托打类：
+     pointerdown → .jelly-hit + .is-press   快速压扁（90ms）
+     松手        → .is-release              一次弹性回弹（420ms）
+   选择器带元素前缀，特异性高于 Tailwind 的 active:scale-*，两套写法不会打架；
+   长按（>360ms）与滑动（>8px）在 JS 侧就撤销，不影响长按菜单和列表滚动
+   ========================================================================== */
+@keyframes jellySquash {
+  0% {
+    transform: scale(0.925, 0.9);
+  }
+  26% {
+    transform: scale(1.036, 1.044);
+  }
+  50% {
+    transform: scale(0.986, 0.98);
+  }
+  74% {
+    transform: scale(1.01, 1.013);
+  }
+  100% {
+    transform: scale(1, 1);
+  }
+}
+
+.jelly-hit {
+  transform-origin: center center;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.jelly-hit.is-press,
+button.jelly-hit.is-press,
+.jelly-hit.is-press:active {
+  transform: scale(0.925, 0.9);
+  transition: transform 90ms var(--ease-standard),
+    background-color var(--dur-2) var(--ease-standard),
+    color var(--dur-2) var(--ease-standard),
+    border-color var(--dur-2) var(--ease-standard),
+    box-shadow var(--dur-2) var(--ease-standard),
+    opacity var(--dur-2) var(--ease-standard);
+  will-change: transform;
+}
+
+.jelly-hit.is-release,
+button.jelly-hit.is-release {
+  animation: jellySquash 420ms var(--ease-standard) both;
+  will-change: transform;
+}
+
+/* 关掉果冻时退化为极轻的按压反馈（只压 3%，不回弹） */
+[data-jelly='off'] .jelly-hit.is-press {
+  transform: scale(0.972);
+}
+[data-jelly='off'] .jelly-hit.is-release,
+[data-motion='reduced'] .jelly-hit.is-release {
+  animation: none;
+}
+[data-motion='reduced'] .jelly-hit.is-press {
+  transform: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .jelly-hit.is-press,
+  .jelly-hit.is-release {
+    transform: none;
+    animation: none;
   }
 }

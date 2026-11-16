@@ -115,7 +115,8 @@ export function Button({
       onClick={onClick}
       className={clsx(
         'inline-flex shrink-0 items-center justify-center font-medium',
-        'transition-all ease-standard duration-2 active:scale-[0.97]',
+        // transform 交给全局果冻层（lib/jelly.ts + index.css），这里只管配色过渡
+        'transition-[background-color,color,border-color,box-shadow,filter,opacity] ease-standard duration-2',
         'disabled:pointer-events-none disabled:opacity-40',
         '[&>*]:shrink-0',
         sizes[size],
@@ -151,8 +152,8 @@ export function IconButton({
       aria-label={label}
       title={label}
       className={clsx(
-        'inline-flex items-center justify-center rounded-xl border transition ease-standard duration-2',
-        'active:scale-[0.94]',
+        'inline-flex items-center justify-center rounded-xl border',
+        'transition-[background-color,color,border-color,box-shadow] ease-standard duration-2',
         active
           ? 'border-transparent bg-ink text-ink-inverse'
           : 'border-paper-line bg-transparent text-ink-soft hover:border-ink hover:text-ink',
@@ -299,21 +300,35 @@ export function Segmented<T extends string>({
   options: Array<{ value: T; label: string }>
   onChange: (v: T) => void
 }) {
+  const n = options.length
+  const idx = Math.max(
+    0,
+    options.findIndex((o) => o.value === value)
+  )
   return (
-    <div className="flex gap-1 rounded-xl bg-paper-sunken p-1">
+    <div className="relative flex rounded-xl bg-paper-sunken p-1">
+      {/* 指示块滑过去，比直接换背景更有「果冻」连贯感 */}
+      <span
+        aria-hidden
+        className="pointer-events-none absolute inset-y-1 left-1 rounded-lg bg-paper-card shadow-e1"
+        style={{
+          width: `calc((100% - 0.5rem) / ${n})`,
+          transform: `translateX(${idx * 100}%)`,
+          transition: 'transform var(--dur-4) var(--ease-jelly)'
+        }}
+      />
       {options.map((o) => {
         const active = value === o.value
         return (
           <button
             key={o.value}
+            type="button"
             onClick={() => onChange(o.value)}
             aria-pressed={active}
             className={clsx(
-              'flex-1 rounded-lg px-2 py-2 text-label font-medium',
-              'transition-all ease-spring duration-2 active:scale-[0.97]',
-              active
-                ? 'bg-paper-card text-ink shadow-e1'
-                : 'text-ink-faint hover:text-ink-soft'
+              'relative flex-1 rounded-lg px-2 py-2 text-center text-label font-medium',
+              'transition-colors ease-standard duration-2',
+              active ? 'text-ink' : 'text-ink-faint hover:text-ink-soft'
             )}
           >
             {o.label}
@@ -374,7 +389,8 @@ export function Chip({
       onClick={onClick}
       aria-pressed={active}
       className={clsx(
-        'shrink-0 rounded-full border px-3.5 py-2 text-label transition-all ease-standard duration-2 active:scale-[0.96]',
+        'shrink-0 rounded-full border px-3.5 py-2 text-label',
+        'transition-[background-color,color,border-color,box-shadow] ease-standard duration-2',
         active
           ? tone === 'reel'
             ? 'border-reel/35 bg-reel-soft text-reel-dark'

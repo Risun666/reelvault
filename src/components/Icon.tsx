@@ -41,6 +41,7 @@ export type IconName =
   | 'github'
   | 'mail'
   | 'user'
+  | 'palette'
 
 const PATHS: Record<IconName, string> = {
   home: 'M3 10.5 12 3l9 7.5V21a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z',
@@ -76,13 +77,15 @@ const PATHS: Record<IconName, string> = {
   share: 'M12 3v13m0-13 4 4m-4-4-4 4M5 15v4h14v-4',
   github: 'M12 2a10 10 0 0 0-3.16 19.49c.5.09.68-.22.68-.48v-1.7c-2.78.6-3.37-1.34-3.37-1.34-.45-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.89 1.53 2.34 1.09 2.91.83.09-.65.35-1.09.64-1.34-2.22-.25-4.56-1.11-4.56-4.94 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.65 0 0 .84-.27 2.75 1.02a9.5 9.5 0 0 1 5 0c1.91-1.29 2.75-1.02 2.75-1.02.55 1.38.2 2.4.1 2.65.64.7 1.03 1.59 1.03 2.68 0 3.84-2.35 4.69-4.58 4.93.36.31.68.92.68 1.85v2.74c0 .27.18.58.69.48A10 10 0 0 0 12 2Z',
   mail: 'M3 5h18a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Zm1.7 2L12 12.3 19.3 7H4.7Z',
-  user: 'M12 4a4 4 0 1 1 0 8 4 4 0 0 1 0-8Zm0 10c4.42 0 8 2.24 8 5v1H4v-1c0-2.76 3.58-5 8-5Z'
+  user: 'M12 4a4 4 0 1 1 0 8 4 4 0 0 1 0-8Zm0 10c4.42 0 8 2.24 8 5v1H4v-1c0-2.76 3.58-5 8-5Z',
+  palette:
+    'M12 3a9 9 0 1 0 0 18h1.3a1.9 1.9 0 0 0 .45-3.74l-.62-.15a1.4 1.4 0 0 1 .3-2.76h2.2A4.4 4.4 0 0 0 20 10.1 6.9 6.9 0 0 0 12 3ZM8.2 9.2h.01M6.6 12.6h.01M9.6 15.4h.01'
 }
 
 const STROKE_ONLY: IconName[] = [
   'home', 'chart', 'plus', 'search', 'close', 'check', 'trash', 'edit', 'download', 'upload',
   'chevronLeft', 'chevronRight', 'film', 'tv', 'filter', 'grid', 'list', 'shelf', 'calendar', 'clock',
-  'image', 'tag', 'eyeOff', 'refresh', 'share', 'star', 'mail', 'user'
+  'image', 'tag', 'eyeOff', 'refresh', 'share', 'star', 'mail', 'user', 'palette'
 ]
 
 export default function Icon({ name, className = '', size = 22, weight }: Props) {

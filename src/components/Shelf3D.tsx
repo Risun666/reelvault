@@ -31,11 +31,25 @@ const MOVE_CANCEL_PX = 10
 /** 侧卡 3D 参数 */
 const SIDE_ANGLE = 36
 const VISIBLE_SIDE = 3
+/**
+ * 真实渲染的张数半径：只给居中卡左右各 3 张挂载海报。
+ * 更远的槽位留空壳占位，滚动几何不变，但 DOM/图片解码量从「整库」降到 7 张
+ * —— 这是长片库滑动卡顿的主因。
+ */
+const RENDER_RADIUS = 3
+
+interface Pose {
+  transform: string
+  /** 侧面压暗强度（用半透明遮罩代替 filter，避免 3D 层重复栅格化） */
+  shade: number
+  opacity: number
+  zIndex: number
+}
 
 /** 按 offset（当前居中为 0，左负右正）计算立体卡姿态 */
-function poseOf(o: number): { transform: string; filter: string; opacity: number; zIndex: number } {
+function poseOf(o: number): Pose {
   if (o === 0) {
-    return { transform: 'rotateY(0deg) translateY(-8px)', filter: 'none', opacity: 1, zIndex: 20 }
+    return { transform: 'rotateY(0deg) translateY(-8px)', shade: 0, opacity: 1, zIndex: 20 }
   }
   const d = Math.min(Math.abs(o), VISIBLE_SIDE + 1)
   const dir = o < 0 ? 1 : -1
@@ -43,10 +57,9 @@ function poseOf(o: number): { transform: string; filter: string; opacity: number
   const scale = 0.78 - Math.max(0, d - 1) * 0.08
   const z = -80 - Math.max(0, d - 1) * 50
   const y = 10 + Math.max(0, d - 1) * 5
-  const bright = 0.64 - Math.max(0, d - 1) * 0.14
   return {
     transform: `rotateY(${rot}deg) translateZ(${z}px) translateY(${y}px) scale(${scale})`,
-    filter: `brightness(${bright})`,
+    shade: 0.26 + Math.max(0, d - 1) * 0.1,
     opacity: d > VISIBLE_SIDE ? 0 : 1,
     zIndex: 10 - d
   }
@@ -81,42 +94,66 @@ export default function Shelf3D({
 
   const current = deck[Math.min(active, deck.length - 1)] ?? null
 
-  /** 槽位宽：卡与卡相互重叠，步进 = 槽位宽而非视口宽 */
-  const slotWidth = () => {
+  /* ---------------------------------------------------------------- 槽位宽
+     每次滚动都去量 DOM 会触发布局抖动，这里量一次缓存起来，
+     只有容器尺寸变化（旋转屏幕 / 字号变化）才重新量。 */
+  const slotWRef = useRef(0)
+  const measureSlot = useCallback(() => {
     const el = trackRef.current
-    if (!el) return 0
-    const slot = el.firstElementChild
-    return slot ? slot.getBoundingClientRect().width : el.clientWidth
-  }
+    if (!el) return
+    const slot = el.firstElementChild as HTMLElement | null
+    slotWRef.current = slot ? slot.getBoundingClientRect().width : el.clientWidth
+  }, [])
+
+  useEffect(() => {
+    measureSlot()
+    const el = trackRef.current
+    if (!el || typeof ResizeObserver === 'undefined') return
+    const ro = new ResizeObserver(measureSlot)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [measureSlot])
+
+  const dictRef = useRef({ total: deck.length })
+  dictRef.current.total = deck.length
 
   const onScroll = useCallback(() => {
-    cancelAnimationFrame(rafRef.current)
+    // 同一个 rAF 内只算一次，滚动事件的密度远高于屏幕刷新
+    if (rafRef.current) return
     rafRef.current = requestAnimationFrame(() => {
-      const w = slotWidth()
+      rafRef.current = 0
       const el = trackRef.current
+      const w = slotWRef.current
       if (!el || !w) return
       const i = Math.round(el.scrollLeft / w)
-      if (i >= 0 && i < deck.length) setActive((prev) => (prev === i ? prev : i))
+      if (i >= 0 && i < dictRef.current.total) setActive((prev) => (prev === i ? prev : i))
     })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [deck.length])
+  }, [])
 
-  useEffect(() => () => cancelAnimationFrame(rafRef.current), [])
+  useEffect(
+    () => () => {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current)
+    },
+    []
+  )
 
   const scrollToCard = useCallback((index: number) => {
     const el = trackRef.current
-    const w = slotWidth()
+    const w = slotWRef.current
     if (!el || !w) return
     el.scrollTo({ left: index * w, behavior: 'smooth' })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  /* 回调必须稳定：否则每次 active 变化都会让 memo 过的卡片全部重渲 */
+  const activeRef = useRef(0)
+  activeRef.current = active
 
   const onCardOpen = useCallback(
     (item: TitleItem, index: number) => {
-      if (index === active) navigate(`/title/${zone}/${item.id}`)
+      if (index === activeRef.current) navigate(`/title/${zone}/${item.id}`)
       else scrollToCard(index)
     },
-    [active, navigate, scrollToCard, zone]
+    [navigate, scrollToCard, zone]
   )
 
   const markStatus = useCallback(
@@ -139,18 +176,22 @@ export default function Shelf3D({
       <div className="deck-stage">
         <div ref={trackRef} onScroll={onScroll} className="deck-track no-scrollbar">
           {deck.map((item, idx) => {
+            const near = Math.abs(idx - active) <= RENDER_RADIUS
             const o = Math.max(-VISIBLE_SIDE - 1, Math.min(VISIBLE_SIDE + 1, idx - active))
             return (
+              // 槽位一直在（保证滚动总宽与吸附点不变），只有邻近几张才挂真卡
               <div className="deck-slot" key={item.id}>
-                <DeckCard
-                  zone={zone}
-                  item={item}
-                  index={idx}
-                  offset={o}
-                  isActive={o === 0}
-                  onOpen={onCardOpen}
-                  onLongPress={setActionItem}
-                />
+                {near && (
+                  <DeckCard
+                    zone={zone}
+                    item={item}
+                    index={idx}
+                    offset={o}
+                    isActive={o === 0}
+                    onOpen={onCardOpen}
+                    onLongPress={setActionItem}
+                  />
+                )}
               </div>
             )
           })}
@@ -167,14 +208,14 @@ export default function Shelf3D({
               aria-label={`第 ${i + 1} 张`}
               onClick={() => scrollToCard(i)}
               className={clsx(
-                'h-1.5 rounded-full transition-all ease-spring duration-2',
+                'h-1.5 rounded-full transition-all ease-spring duration-3',
                 i === active ? 'w-5 bg-reel' : 'w-1.5 bg-paper-lineStrong active:opacity-60'
               )}
             />
           ))
         ) : (
           <span className="flex items-baseline gap-1.5 font-display tabular-nums">
-            <span className="text-title font-semibold text-ink">
+            <span key={active} className="jelly-in text-title font-semibold text-ink">
               {String(active + 1).padStart(2, '0')}
             </span>
             <span>/ {deck.length}</span>
@@ -183,73 +224,71 @@ export default function Shelf3D({
       </div>
 
       {/* ------------------------------------------------ 底部：当前选中详情 */}
-      <div className="deck-info px-5 pb-2 pt-4 text-center">
-        {current && (
-          <div key={current.id} className="animate-slideUp">
-            <h2 className="font-display text-headline font-semibold leading-tight tracking-tight text-ink">
-              {current.title}
-            </h2>
-            {current.originalTitle && current.originalTitle !== current.title && (
-              <p className="mt-0.5 truncate text-caption text-ink-faint">{current.originalTitle}</p>
+      <div className="deck-info px-5 pb-1 pt-3 text-center">
+        <div key={current.id} className="jelly-in">
+          <h2 className="font-display text-headline font-semibold leading-tight tracking-tight text-ink">
+            {current.title}
+          </h2>
+          {current.originalTitle && current.originalTitle !== current.title && (
+            <p className="mt-0.5 truncate text-caption text-ink-faint">{current.originalTitle}</p>
+          )}
+          <div className="mt-2 flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-body-sm text-ink-soft">
+            <span>{current.year || '—'}</span>
+            <span aria-hidden>·</span>
+            <span>{KIND_LABEL[current.kind]}</span>
+            <span aria-hidden>·</span>
+            <span
+              className={clsx(
+                'font-medium',
+                current.status === 'watching' && 'text-reel-dark',
+                current.status === 'dropped' && 'text-ink-faint'
+              )}
+            >
+              {STATUS_LABEL[current.status]}
+            </span>
+            {current.kind === 'tv' && current.progress && current.progress.episode > 0 && (
+              <>
+                <span aria-hidden>·</span>
+                <span className="tabular-nums">
+                  S{current.progress.season}E{current.progress.episode}
+                </span>
+              </>
             )}
-            <div className="mt-2 flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-body-sm text-ink-soft">
-              <span>{current.year || '—'}</span>
-              <span aria-hidden>·</span>
-              <span>{KIND_LABEL[current.kind]}</span>
-              <span aria-hidden>·</span>
-              <span
+            {current.rating ? (
+              <span className="flex items-center gap-0.5 font-medium text-reel-dark">
+                <Icon name="starFill" size={11} />
+                {(current.rating / 2).toFixed(1)}
+              </span>
+            ) : null}
+          </div>
+
+          <div className="mt-3 flex items-center justify-center gap-2">
+            <button
+              type="button"
+              onClick={() => navigate(`/title/${zone}/${current.id}`)}
+              className="pressable flex h-11 items-center gap-1.5 rounded-xl bg-reel px-4 text-body-sm font-semibold text-reel-on shadow-e1 hover:shadow-lift"
+            >
+              <Icon name="chevronRight" size={16} />
+              详情
+            </button>
+            {(['watching', 'wish', 'done'] as const).map((s) => (
+              <button
+                key={s}
+                type="button"
+                aria-label={`标记为${STATUS_LABEL[s]}`}
+                onClick={() => void markStatus(current, s)}
                 className={clsx(
-                  'font-medium',
-                  current.status === 'watching' && 'text-reel-dark',
-                  current.status === 'dropped' && 'text-ink-faint'
+                  'pressable flex h-11 min-w-[44px] items-center justify-center rounded-xl border px-3 text-caption font-medium',
+                  current.status === s
+                    ? 'border-reel bg-reel/12 text-reel-dark'
+                    : 'border-paper-line bg-paper-card text-ink-soft hover:border-paper-lineStrong hover:text-ink'
                 )}
               >
-                {STATUS_LABEL[current.status]}
-              </span>
-              {current.kind === 'tv' && current.progress && current.progress.episode > 0 && (
-                <>
-                  <span aria-hidden>·</span>
-                  <span className="tabular-nums">
-                    S{current.progress.season}E{current.progress.episode}
-                  </span>
-                </>
-              )}
-              {current.rating ? (
-                <span className="flex items-center gap-0.5 font-medium text-reel-dark">
-                  <Icon name="starFill" size={11} />
-                  {(current.rating / 2).toFixed(1)}
-                </span>
-              ) : null}
-            </div>
-
-            <div className="mt-3.5 flex items-center justify-center gap-2">
-              <button
-                type="button"
-                onClick={() => navigate(`/title/${zone}/${current.id}`)}
-                className="flex h-11 items-center gap-1.5 rounded-xl bg-reel px-4 text-body-sm font-semibold text-reel-on shadow-e1 transition-all ease-spring duration-2 hover:shadow-lift active:scale-95"
-              >
-                <Icon name="chevronRight" size={16} />
-                详情
+                {STATUS_LABEL[s]}
               </button>
-              {(['watching', 'wish', 'done'] as const).map((s) => (
-                <button
-                  key={s}
-                  type="button"
-                  aria-label={`标记为${STATUS_LABEL[s]}`}
-                  onClick={() => void markStatus(current, s)}
-                  className={clsx(
-                    'flex h-11 min-w-[44px] items-center justify-center rounded-xl border px-3 text-caption font-medium transition-all ease-spring duration-2 active:scale-95',
-                    current.status === s
-                      ? 'border-reel bg-reel/12 text-reel-dark'
-                      : 'border-paper-line bg-paper-card text-ink-soft hover:border-paper-lineStrong hover:text-ink'
-                  )}
-                >
-                  {STATUS_LABEL[s]}
-                </button>
-              ))}
-            </div>
+            ))}
           </div>
-        )}
+        </div>
       </div>
 
       {/* ------------------------------------------------ 长按：快捷操作 */}
@@ -305,8 +344,7 @@ export default function Shelf3D({
 
 /* ==========================================================================
    单张全息卡：正面大海报 + 左侧书脊（状态色）+ 右侧背面 + 顶部书页
-   offset = 距居中位置的张数，仅依赖 item/offset/isActive，memo 后滑动时
-   只有邻近几张卡会重渲，长片库也顺滑
+   offset = 距居中位置的张数；memo 后只在姿态真正变化时才重渲
    ========================================================================== */
 
 const DeckCard = memo(function DeckCard({
@@ -326,9 +364,13 @@ const DeckCard = memo(function DeckCard({
   onOpen: (item: TitleItem, index: number) => void
   onLongPress: (item: TitleItem) => void
 }) {
-  const press = useRef<{ timer: number; x: number; y: number; fired: boolean; moved: boolean } | null>(
-    null
-  )
+  const press = useRef<{
+    timer: number
+    x: number
+    y: number
+    fired: boolean
+    moved: boolean
+  } | null>(null)
 
   const cancelPressTimer = () => {
     if (press.current) window.clearTimeout(press.current.timer)
@@ -339,6 +381,9 @@ const DeckCard = memo(function DeckCard({
   return (
     <button
       type="button"
+      // 卡牌自身有 3D 姿态（transform 由 pose 计算），不参与全局果冻按压，
+      // 否则按下时会被压扁成平面
+      data-no-jelly
       aria-label={`${item.title}，${STATUS_LABEL[item.status]}`}
       className={clsx('deck-card', isActive && 'is-active', item.status === 'dropped' && 'is-muted')}
       style={{ zIndex: pose.zIndex }}
@@ -375,42 +420,46 @@ const DeckCard = memo(function DeckCard({
         onOpen(item, index)
       }}
     >
-      <div className="deck-cube" style={{ transform: pose.transform, filter: pose.filter }}>
-        {/* 顶部书页：层叠纸纹 */}
-        <div className="deck-face deck-top" aria-hidden />
-        {/* 右侧背面：左卡朝右倾时兜住边缘 */}
-        <div className="deck-face deck-back" aria-hidden />
-        {/* 左侧书脊：状态色 + 竖排片名 */}
-        <div className={clsx('deck-face deck-spine', SPINE_TONE[item.status])} aria-hidden>
-          <span className="deck-spine-text">{item.title}</span>
-        </div>
-        {/* 正面：大海报 + 全息光泽 */}
-        <div className="deck-face deck-front">
-          <Poster zone={zone} item={item} rounded="rounded-2xl" />
-          <div className="deck-holo" />
-          {isActive && (
-            <>
-              {item.rating ? (
-                <span className="deck-chip left-2.5 top-2.5">
-                  <Icon name="starFill" size={10} />
-                  {(item.rating / 2).toFixed(1)}
+      <div className="deck-cube" style={{ transform: pose.transform, opacity: pose.opacity }}>
+        {/* 果冻内胆：落位时整体软弹一下，不干扰外层的 3D 姿态 */}
+        <div className={clsx('deck-jelly', isActive && 'is-jelly')}>
+          {/* 顶部书页：层叠纸纹 */}
+          <div className="deck-face deck-top" aria-hidden />
+          {/* 右侧背面：左卡朝右倾时兜住边缘 */}
+          <div className="deck-face deck-back" aria-hidden />
+          {/* 左侧书脊：状态色 + 竖排片名 */}
+          <div className={clsx('deck-face deck-spine', SPINE_TONE[item.status])} aria-hidden>
+            <span className="deck-spine-text">{item.title}</span>
+          </div>
+          {/* 正面：大海报 + 压暗遮罩 + 全息光泽 */}
+          <div className="deck-face deck-front">
+            <Poster zone={zone} item={item} rounded="rounded-2xl" />
+            <div className="deck-shade" style={{ opacity: pose.shade }} aria-hidden />
+            <div className="deck-holo" aria-hidden />
+            {isActive && (
+              <>
+                {item.rating ? (
+                  <span className="deck-chip left-2.5 top-2.5">
+                    <Icon name="starFill" size={10} />
+                    {(item.rating / 2).toFixed(1)}
+                  </span>
+                ) : null}
+                <span
+                  className={clsx(
+                    'deck-chip right-2.5 top-2.5',
+                    item.status === 'watching' && 'deck-chip-reel'
+                  )}
+                >
+                  {STATUS_LABEL[item.status]}
                 </span>
-              ) : null}
-              <span
-                className={clsx(
-                  'deck-chip right-2.5 top-2.5',
-                  item.status === 'watching' && 'deck-chip-reel'
+                {item.kind === 'tv' && item.progress && item.progress.episode > 0 && (
+                  <span className="deck-chip deck-chip-progress">
+                    S{item.progress.season}E{item.progress.episode}
+                  </span>
                 )}
-              >
-                {STATUS_LABEL[item.status]}
-              </span>
-              {item.kind === 'tv' && item.progress && item.progress.episode > 0 && (
-                <span className="deck-chip deck-chip-progress">
-                  S{item.progress.season}E{item.progress.episode}
-                </span>
-              )}
-            </>
-          )}
+              </>
+            )}
+          </div>
         </div>
       </div>
     </button>

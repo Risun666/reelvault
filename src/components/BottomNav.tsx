@@ -12,9 +12,21 @@ const ITEMS: Array<{ to: string; label: string; icon: IconName }> = [
 
 export default function BottomNav() {
   const { pathname } = useLocation()
+  const idx = ITEMS.findIndex((it) => it.to === pathname)
   return (
     <nav className="sticky bottom-0 z-40 border-t border-paper-line bg-paper-card/85 backdrop-blur-xl">
-      <div className="mx-auto flex max-w-[560px] px-1">
+      <div className="relative mx-auto flex max-w-[560px] px-1">
+        {/* 选中胶囊横滑过去（而不是各自原地缩放），切换 Tab 时更连贯 */}
+        <span
+          aria-hidden
+          className="pointer-events-none absolute top-1.5 h-8 w-14 rounded-full bg-reel-soft"
+          style={{
+            left: `calc(4px + ${Math.max(idx, 0)} * (100% - 8px) / ${ITEMS.length} + ((100% - 8px) / ${ITEMS.length} - 3.5rem) / 2)`,
+            opacity: idx < 0 ? 0 : 1,
+            transition:
+              'left var(--dur-4) var(--ease-jelly), opacity var(--dur-2) var(--ease-standard)'
+          }}
+        />
         {ITEMS.map((it) => {
           const active = pathname === it.to
           return (
@@ -27,13 +39,6 @@ export default function BottomNav() {
                 'transition-colors ease-standard duration-2'
               )}
             >
-              {/* 胶囊指示：选中时以弹簧曲线展开 */}
-              <span
-                className={clsx(
-                  'absolute top-1.5 h-8 w-14 rounded-full transition-all ease-spring duration-3',
-                  active ? 'scale-100 bg-reel-soft opacity-100' : 'scale-50 opacity-0'
-                )}
-              />
               <span className="relative">
                 <Icon
                   name={it.icon}

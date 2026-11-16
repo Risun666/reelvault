@@ -21,25 +21,26 @@ const svgPoster = (title, sub, c1, c2) => {
 }
 
 const MOVIES = [
-  ['沙丘：第二部', 'DUNE: PART TWO', '2024', 'movie', 'watching', 9, '#8a6a4f', '#4a3a55'],
-  ['奥本海默', 'OPPENHEIMER', '2023', 'movie', 'watching', 8, '#6b4a3a', '#2e2a26'],
-  ['繁花', 'BLOSSOMS SHANGHAI', '2023', 'tv', 'watching', 9, '#8a3a3a', '#4d2430'],
-  ['三体', '3 BODY PROBLEM', '2024', 'tv', 'watching', 7, '#2e4a6b', '#141e33'],
-  ['沙丘', 'DUNE', '2021', 'movie', 'wish', 8, '#b08a5a', '#5c4630'],
-  ['星际穿越', 'INTERSTELLAR', '2014', 'movie', 'wish', 10, '#1f2b4d', '#0d1220'],
-  ['流浪地球2', 'WANDERING EARTH II', '2023', 'movie', 'wish', 8, '#33507a', '#101c2e'],
-  ['漫长的季节', 'THE LONG SEASON', '2023', 'tv', 'wish', 9, '#5a6b3a', '#2e3324'],
-  ['让子弹飞', 'LET THE BULLETS FLY', '2010', 'movie', 'done', 10, '#7a5a2e', '#33240f'],
-  ['楚门的世界', 'THE TRUMAN SHOW', '1998', 'movie', 'done', 9, '#3a6b8a', '#132b38'],
-  ['海上钢琴师', 'THE LEGEND OF 1900', '1998', 'movie', 'done', 9, '#2e5a4a', '#10221c'],
-  ['权游 第八季', 'GAME OF THRONES S8', '2019', 'tv', 'dropped', 5, '#4a4a5a', '#23232e'],
-  ['西部世界 第四季', 'WESTWORLD S4', '2022', 'tv', 'dropped', 6, '#5a4632', '#2b2118']
+  ['沙丘：第二部', 'DUNE: PART TWO', '2024', 'movie', 'watching', 9, '#8a6a4f', '#4a3a55', ['科幻', '冒险', '剧情']],
+  ['奥本海默', 'OPPENHEIMER', '2023', 'movie', 'watching', 8, '#6b4a3a', '#2e2a26', ['剧情', '历史']],
+  ['繁花', 'BLOSSOMS SHANGHAI', '2023', 'tv', 'watching', 9, '#8a3a3a', '#4d2430', ['剧情', '爱情']],
+  ['三体', '3 BODY PROBLEM', '2024', 'tv', 'watching', 7, '#2e4a6b', '#141e33', ['科幻', '悬疑', '剧情']],
+  ['沙丘', 'DUNE', '2021', 'movie', 'wish', 8, '#b08a5a', '#5c4630', ['科幻', '冒险']],
+  ['星际穿越', 'INTERSTELLAR', '2014', 'movie', 'wish', 10, '#1f2b4d', '#0d1220', ['科幻', '冒险', '剧情']],
+  ['流浪地球2', 'WANDERING EARTH II', '2023', 'movie', 'wish', 8, '#33507a', '#101c2e', ['科幻', '冒险', '动作']],
+  ['漫长的季节', 'THE LONG SEASON', '2023', 'tv', 'wish', 9, '#5a6b3a', '#2e3324', ['剧情', '犯罪', '悬疑']],
+  ['让子弹飞', 'LET THE BULLETS FLY', '2010', 'movie', 'done', 10, '#7a5a2e', '#33240f', ['喜剧', '动作', '犯罪']],
+  ['楚门的世界', 'THE TRUMAN SHOW', '1998', 'movie', 'done', 9, '#3a6b8a', '#132b38', ['剧情', '喜剧']],
+  ['海上钢琴师', 'THE LEGEND OF 1900', '1998', 'movie', 'done', 9, '#2e5a4a', '#10221c', ['剧情', '音乐']],
+  ['权游 第八季', 'GAME OF THRONES S8', '2019', 'tv', 'dropped', 5, '#4a4a5a', '#23232e', ['剧情', '奇幻', '冒险']],
+  ['西部世界 第四季', 'WESTWORLD S4', '2022', 'tv', 'dropped', 6, '#5a4632', '#2b2118', ['科幻', '西部', '剧情']]
 ].map((m, i) => ({
   id: `t${i + 1}`,
   kind: m[3],
   title: m[0],
   originalTitle: m[1],
   year: m[2],
+  genres: m[8],
   posterRemote: svgPoster(m[0], m[1], m[4] === 'dropped' ? '#777' : m[6], m[7]),
   hasLocalPoster: false,
   tags: [],
@@ -123,6 +124,25 @@ await page.waitForSelector('.deck-card', { timeout: 15000 })
 await page.waitForTimeout(1800)
 await page.screenshot({ path: `${OUT}shelf-dark.png` })
 console.log('ok: shelf-dark.png')
+
+// 4. 筛选面板：题材分类
+await page.getByRole('button', { name: '筛选' }).click()
+await page.waitForTimeout(600)
+await page.screenshot({ path: `${OUT}filter-genres.png` })
+console.log('ok: filter-genres.png')
+
+// 5. 设置页外观面板
+await seed(page, 'light')
+await page.goto(`${BASE}/#/settings`, { waitUntil: 'networkidle' })
+await page.reload({ waitUntil: 'networkidle' })
+await page.waitForTimeout(1400)
+await page.evaluate(() => {
+  const h = [...document.querySelectorAll('h2')].find((e) => e.textContent?.trim() === '外观')
+  h?.scrollIntoView({ block: 'start' })
+})
+await page.waitForTimeout(900)
+await page.screenshot({ path: `${OUT}appearance.png` })
+console.log('ok: appearance.png')
 
 await browser.close()
 console.log('done')

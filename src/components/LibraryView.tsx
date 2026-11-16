@@ -7,11 +7,12 @@ import { gapOf, useTheme } from '../store/theme'
 import type { Zone } from '../lib/db'
 import type { TitleItem, WatchStatus } from '../types'
 import { KIND_LABEL, STATUS_LABEL } from '../types'
+import { genreFacets, genreKeysOf, genreLabel } from '../lib/genres'
 import Poster from '../components/Poster'
 import Icon from '../components/Icon'
 import PeopleGrid from '../components/PeopleGrid'
 import Shelf3D from '../components/Shelf3D'
-import { Button, Chip, EmptyState, IconButton, Segmented, Skeleton } from '../components/ui'
+import { Button, Chip, EmptyState, Segmented, Skeleton } from '../components/ui'
 
 const STATUS_TABS: Array<{ value: WatchStatus | 'all'; label: string }> = [
   { value: 'all', label: '全部' },
@@ -54,6 +55,7 @@ export default function LibraryView({
   const [q, setQ] = useState('')
   const [status, setStatus] = useState<WatchStatus | 'all'>('all')
   const [kind, setKind] = useState<'all' | 'movie' | 'tv'>('all')
+  const [genre, setGenre] = useState<string | null>(null)
   const [tag, setTag] = useState<string | null>(null)
   const [sort, setSort] = useState<SortKey>('updated')
   const [showFilter, setShowFilter] = useState(false)
@@ -65,15 +67,20 @@ export default function LibraryView({
     return [...set].sort()
   }, [items])
 
+  /** 题材清单：只列片库里真实存在的，按部数从多到少 */
+  const genres = useMemo(() => genreFacets(items), [items])
+
   const filtered = useMemo(() => {
     const kw = q.trim().toLowerCase()
     let list = items.filter((i) => {
       if (status !== 'all' && i.status !== status) return false
       if (kind !== 'all' && i.kind !== kind) return false
+      if (genre && !genreKeysOf(i.genres).includes(genre)) return false
       if (tag && !(i.tags ?? []).includes(tag)) return false
       if (!kw) return true
       return [i.title, i.originalTitle, i.year, i.director, i.overview, (i.tags ?? []).join(' ')]
         .concat(i.cast ?? [])
+        .concat(i.genres ?? [])
         .filter(Boolean)
         .some((v) => String(v).toLowerCase().includes(kw))
     })
@@ -91,14 +98,21 @@ export default function LibraryView({
       }
     })
     return list
-  }, [items, q, status, kind, tag, sort])
+  }, [items, q, status, kind, genre, tag, sort])
 
-  const filtersOn = status !== 'all' || kind !== 'all' || tag !== null || sort !== 'updated'
+  const filtersOn =
+    status !== 'all' || kind !== 'all' || genre !== null || tag !== null || sort !== 'updated'
+  const activeCount =
+    (status !== 'all' ? 1 : 0) +
+    (kind !== 'all' ? 1 : 0) +
+    (genre ? 1 : 0) +
+    (tag ? 1 : 0) +
+    (sort !== 'updated' ? 1 : 0)
 
   return (
     <div className="mx-auto max-w-[560px] px-4 pb-10 pt-safe">
       {/* ---------------------------------------------------------- 页头 */}
-      <header className="flex items-end justify-between gap-3 pb-5 pt-3">
+      <header className="flex items-end justify-between gap-3 pb-4 pt-2">
         <div className="min-w-0">
           <h1
             className={clsx(
@@ -128,7 +142,7 @@ export default function LibraryView({
         </Link>
       </header>
 
-      <div className="pb-4">
+      <div className="pb-3">
         <Segmented
           value={tab}
           onChange={(v) => setTab(v as 'titles' | 'people')}
@@ -158,13 +172,28 @@ export default function LibraryView({
                 className="h-11 w-full rounded-xl border border-paper-line bg-paper-card pl-10 pr-3 text-body-sm text-ink outline-none transition ease-standard duration-2 placeholder:text-ink-faint/85 hover:border-paper-lineStrong focus:border-reel focus:ring-2 focus:ring-reel/15"
               />
             </div>
-            <IconButton
-              icon="filter"
-              label="筛选"
-              size={44}
-              active={filtersOn}
+            {/* 筛选：带文字与生效条件数，避免「不知道能按题材筛」 */}
+            <button
+              type="button"
               onClick={() => setShowFilter((v) => !v)}
-            />
+              aria-label="筛选"
+              aria-pressed={showFilter}
+              className={clsx(
+                'relative flex h-11 shrink-0 items-center gap-1.5 rounded-xl border px-3 text-label font-medium',
+                'transition-all ease-spring duration-2 active:scale-[0.97] active:duration-1',
+                showFilter || filtersOn
+                  ? 'border-ink bg-ink text-ink-inverse'
+                  : 'border-paper-line bg-paper-card text-ink-soft hover:border-paper-lineStrong hover:text-ink'
+              )}
+            >
+              <Icon name="filter" size={16} />
+              筛选
+              {filtersOn && (
+                <span className="absolute -right-1 -top-1 flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-reel px-1 text-micro font-semibold leading-none text-reel-on ring-2 ring-paper">
+                  {activeCount}
+                </span>
+              )}
+            </button>
             {/* 视图切换：明确显示当前视图，点按循环切换 书架→宫格→列表 */}
             <button
               type="button"
@@ -180,14 +209,58 @@ export default function LibraryView({
           {/* ------------------------------------------------------ 筛选面板 */}
           {showFilter && (
             <div className="animate-slideUp mb-4 rounded-2xl border border-paper-line bg-paper-card p-4 shadow-e1">
-              <div className="mb-2 text-label font-semibold text-ink-faint">类型</div>
-              <div className="mb-4 flex gap-2">
+              <div className="mb-2 flex items-baseline justify-between gap-3">
+                <span className="text-label font-semibold text-ink-faint">媒介</span>
+                <span className="text-micro text-ink-faint">电影 / 剧集</span>
+              </div>
+              <div className="mb-4 flex flex-wrap gap-2">
                 {(['all', 'movie', 'tv'] as const).map((k) => (
                   <Chip key={k} active={kind === k} onClick={() => setKind(k)}>
                     {k === 'all' ? '全部' : KIND_LABEL[k]}
                   </Chip>
                 ))}
               </div>
+
+              <div className="mb-2 flex items-baseline justify-between gap-3">
+                <span className="text-label font-semibold text-ink-faint">题材</span>
+                {genre && (
+                  <button
+                    type="button"
+                    onClick={() => setGenre(null)}
+                    className="text-micro font-medium text-reel-dark active:opacity-60"
+                  >
+                    清除「{genreLabel(genre)}」
+                  </button>
+                )}
+              </div>
+              {genres.length > 0 ? (
+                <div className="mb-4 flex flex-wrap gap-2">
+                  <Chip active={!genre} onClick={() => setGenre(null)}>
+                    全部
+                  </Chip>
+                  {genres.map((g) => (
+                    <Chip
+                      key={g.key}
+                      active={genre === g.key}
+                      onClick={() => setGenre(genre === g.key ? null : g.key)}
+                    >
+                      {g.label}
+                      <span
+                        className={clsx(
+                          'ml-1 tabular-nums',
+                          genre === g.key ? 'opacity-70' : 'text-ink-faint'
+                        )}
+                      >
+                        {g.count}
+                      </span>
+                    </Chip>
+                  ))}
+                </div>
+              ) : (
+                <p className="mb-4 text-caption leading-relaxed text-ink-faint">
+                  片库里的影片还没有题材信息。从 TMDB 添加会自动带上；手动录入的可在编辑页填写「类型」。
+                </p>
+              )}
 
               <div className="mb-2 text-label font-semibold text-ink-faint">排序</div>
               <div className="mb-4 flex flex-wrap gap-2">
@@ -219,6 +292,7 @@ export default function LibraryView({
                   onClick={() => {
                     setStatus('all')
                     setKind('all')
+                    setGenre(null)
                     setTag(null)
                     setSort('updated')
                   }}
@@ -231,7 +305,7 @@ export default function LibraryView({
           )}
 
           {/* ------------------------------------------------------ 状态筛选 */}
-          <div className="no-scrollbar -mx-4 mb-4 flex gap-2 overflow-x-auto px-4 pb-1">
+          <div className="no-scrollbar -mx-4 mb-3 flex gap-2 overflow-x-auto px-4 pb-1">
             {STATUS_TABS.map((s) => (
               <Chip key={s.value} active={status === s.value} onClick={() => setStatus(s.value)}>
                 {s.label}
@@ -268,7 +342,7 @@ export default function LibraryView({
             <Shelf3D
               zone={zone}
               items={filtered}
-              grouped={status === 'all' && !q.trim() && kind === 'all' && !tag}
+              grouped={status === 'all' && !q.trim() && kind === 'all' && !genre && !tag}
             />
           ) : settings.view === 'grid' ? (
             <div
